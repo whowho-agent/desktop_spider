@@ -1,0 +1,78 @@
+name: Release
+
+# Пуш тега vX.Y.Z → сборки под macOS и Windows → GitHub Release с архивами.
+on:
+  push:
+    tags: ["v*"]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - os: macos-latest
+            asset: DesktopSpider-macos-arm64.zip
+          - os: windows-latest
+            asset: DesktopSpider-windows-x64.zip
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Test
+        run: cargo test --locked
+
+      - name: Package macOS (.app)
+        if: runner.os == 'macOS'
+        run: |
+          ./scripts/bundle.sh
+          ditto -c -k --keepParent target/DesktopSpider.app ${{ matrix.asset }}
+
+      - name: Package Windows (exe + presets)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          cargo build --release --locked
+          New-Item -ItemType Directory DesktopSpider | Out-Null
+          Copy-Item target/release/desktop_spider.exe DesktopSpider/
+          Copy-Item -Recurse presets DesktopSpider/presets
+          Compress-Archive -Path DesktopSpider -DestinationPath ${{ matrix.asset }}
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.asset }}
+          path: ${{ matrix.asset }}
+          if-no-files-found: error
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*.zip
+          generate_release_notes: true
+          body: |
+            Процедурный паук, который бегает по рабочему столу за курсором.
+
+            **macOS (Apple Silicon, 13+):** распакуйте `DesktopSpider-macos-arm64.zip`, перенесите `DesktopSpider.app` в «Программы».
+            Сборка подписана ad-hoc, поэтому при первом запуске: правый клик → «Открыть», или
+            `xattr -dr com.apple.quarantine /Applications/DesktopSpider.app`.
+
+            **Windows 10/11 (x64):** распакуйте `DesktopSpider-windows-x64.zip` и запустите `desktop_spider.exe`.
+            SmartScreen может предупредить о неизвестном издателе: «Подробнее» → «Выполнить в любом случае».
+
+            Управление — иконка в меню-баре / трее: пресеты, пауза, отладка, выход.
+            Пресеты — `*.toml` в папке `presets` (в .app — `Contents/Resources/presets`), правки подхватываются на лету.

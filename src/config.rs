@@ -185,11 +185,16 @@ pub fn presets_dir() -> PathBuf {
     if let Some(dir) = std::env::var_os("SPIDER_PRESETS") {
         return PathBuf::from(dir);
     }
-    // Внутри .app: Contents/MacOS/<exe> → Contents/Resources/presets.
     if let Some(exe_dir) = std::env::current_exe().ok().and_then(|e| e.parent().map(Path::to_path_buf)) {
+        // Внутри .app: Contents/MacOS/<exe> → Contents/Resources/presets.
         let bundled = exe_dir.join("../Resources/presets");
         if bundled.is_dir() {
             return bundled;
+        }
+        // Распакованный архив (Windows): presets/ рядом с exe, cwd может быть любым.
+        let beside = exe_dir.join("presets");
+        if beside.is_dir() {
+            return beside;
         }
     }
     PathBuf::from("presets")
