@@ -1,0 +1,25 @@
+# Розовый «осьминог»: 3 пары пунктирных изогнутых щупалец, большая голова.
+
+color_leg   = "#ff70e0"
+color_joint = "#ffb0f0"
+color_body  = "#ffd0f4"
+color_head  = "#ffffff"
+joint_dot   = 1.6
+
+[body]
+max_speed = 360.0
+max_accel = 1800.0
+turn_rate = 5.0
+half_len = 14.0
+half_width = 11.0
+
+[legs]
+spread_deg = [70.0, 115.0, 155.0]
+hip_along = [0.1, -0.3, -0.7]
+segments = [10.0, 10.0, 10.0, 10.0, 9.0, 9.0, 8.0, 8.0, 7.0, 6.0]   # ≈ 87
+rest_dist = 70.0
+style = "dotted"
+step_threshold = 32.0
+step_duration = 0.15
+step_lead = 0.12
+lift = 9.0

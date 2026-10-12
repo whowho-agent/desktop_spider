@@ -1,0 +1,20 @@
+# Пурпурные щупальца: длинные изогнутые цепочки из многих коротких сегментов.
+
+color_leg   = "#d040ff"
+color_joint = "#e890ff"
+color_body  = "#f0c0ff"
+
+[body]
+max_speed = 340.0
+max_accel = 1600.0
+turn_rate = 6.0
+
+[legs]
+spread_deg = [60.0, 100.0, 135.0, 165.0]   # смещены назад — щупальца тянутся за телом
+segments = [8.0, 8.0, 8.0, 8.0, 8.0, 8.0, 8.0, 8.0, 8.0, 8.0, 8.0, 8.0, 8.0, 8.0, 8.0, 8.0]  # = 128
+rest_dist = 102.0          # ≈ 0.8 длины: меньше — щупальца закручиваются в петли
+style = "curve"
+step_threshold = 16.0     # rest_dist + step_threshold ≤ 0.95 длины
+step_duration = 0.14
+step_lead = 0.0
+lift = 5.0

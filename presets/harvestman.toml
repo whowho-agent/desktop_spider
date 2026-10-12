@@ -1,0 +1,25 @@
+# Красный «сенокосец»: редкие длинные ноги из 2 сегментов, высокие колени, неспешный шаг.
+
+color_leg   = "#e05050"
+color_joint = "#ff9090"
+color_body  = "#ffc0c0"
+line_width  = 1.0
+joint_dot   = 1.8
+
+[body]
+max_speed = 420.0
+turn_rate = 7.0
+stop_radius = 60.0
+slow_radius = 200.0
+half_len = 7.0
+half_width = 6.0
+
+[legs]
+spread_deg = [30.0, 70.0, 115.0, 155.0]
+hip_along = [0.4, 0.15, -0.15, -0.4]
+segments = [60.0, 65.0]
+rest_dist = 95.0
+step_threshold = 40.0
+step_duration = 0.13
+step_lead = 0.11
+lift = 12.0

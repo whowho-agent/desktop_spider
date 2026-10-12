@@ -1,0 +1,34 @@
+[package]
+name = "desktop_spider"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+winit = "0.30"
+wgpu = "25"
+pollster = "0.4"
+bytemuck = { version = "1", features = ["derive"] }
+glam = "0.30"
+serde = { version = "1.0.229", features = ["derive"] }
+toml = "1.1.8"
+notify = "8.2.0"
+tray-icon = "0.26.1"
+
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2 = "0.6"
+objc2-app-kit = "0.3"
+objc2-foundation = "0.3"
+
+# Версии совпадают с теми, что уже тянут winit (windows-sys 0.52) и wgpu-hal (windows 0.58).
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.52", features = [
+    "Win32_Foundation",
+    "Win32_UI_WindowsAndMessaging",
+] }
+windows = { version = "0.58", features = [
+    "Win32_Foundation",
+    "Win32_Graphics_DirectComposition",
+] }
+
+[profile.dev]
+opt-level = 1
