@@ -212,7 +212,10 @@ impl State {
         self.last = now;
 
         self.list.clear();
-        self.list.ring(cursor, self.preset.body.stop_radius, 1.0, self.preset.color_ring);
+        // Кольцо остановки вокруг курсора — только в отладке, как цели ступней.
+        if self.debug {
+            self.list.ring(cursor, self.preset.body.stop_radius, 1.0, self.preset.color_ring);
+        }
         self.creature.draw(&mut self.list, self.debug);
         self.renderer.render(&self.list);
     }
