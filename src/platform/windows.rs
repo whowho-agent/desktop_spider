@@ -62,6 +62,10 @@ pub fn overlay_attributes() -> WindowAttributes {
         .with_skip_taskbar(true)
         .with_undecorated_shadow(false)
         .with_corner_preference(CornerPreference::DoNotRound)
+        // WS_EX_NOREDIRECTIONBITMAP: у окна нет GDI-поверхности, на экране только
+        // DirectComposition-визуал. Иначе под визуалом видна непрозрачная GDI-поверхность
+        // (на практике белый прямоугольник размером с исходное окно winit в левом верхнем углу).
+        .with_no_redirection_bitmap(true)
         .with_position(PhysicalPosition::new(x, y))
         .with_inner_size(PhysicalSize::new(w as u32, h as u32))
 }

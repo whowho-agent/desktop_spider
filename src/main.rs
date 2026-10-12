@@ -1,3 +1,8 @@
+// Windows: release-сборка — GUI-подсистема, иначе при запуске (двойной клик, автозапуск)
+// открывается консольное окно с кнопкой на панели задач. Логи (eprintln) при этом
+// по-прежнему пишутся, если stderr перенаправлен (`2> log`, `cargo run`).
+#![cfg_attr(all(windows, not(debug_assertions)), windows_subsystem = "windows")]
+
 mod app;
 mod config;
 mod platform;
