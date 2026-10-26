@@ -11,22 +11,35 @@ const TIP_WIDTH: f32 = 0.5;
 /// Шаг точек пунктира, pt.
 const DOT_SPACING: f32 = 4.5;
 
-pub fn draw_leg(list: &mut DrawList, joints: &[Vec2], p: &Preset) {
+/// Цвет вспышки попадания (#ff6b6b).
+const FLASH_RGB: [f32; 3] = [1.0, 107.0 / 255.0, 107.0 / 255.0];
+
+/// Смешивает цвет пресета с красным вспышки; `k` 0..1, альфа сохраняется.
+pub fn flash_color(c: [f32; 4], k: f32) -> [f32; 4] {
+    let k = k.clamp(0.0, 1.0);
+    let mix = |a: f32, b: f32| a + (b - a) * k;
+    [mix(c[0], FLASH_RGB[0]), mix(c[1], FLASH_RGB[1]), mix(c[2], FLASH_RGB[2]), c[3]]
+}
+
+/// `flash` — сила красной вспышки (0 — цвета пресета).
+pub fn draw_leg(list: &mut DrawList, joints: &[Vec2], p: &Preset, flash: f32) {
     let Some(&foot) = joints.last() else { return };
     let lw = p.line_width;
+    let color_leg = flash_color(p.color_leg, flash);
+    let color_joint = flash_color(p.color_joint, flash * 0.6);
     match p.legs.style {
         LegStyle::Straight => {
             for w in joints.windows(2) {
-                list.segment(w[0], w[1], lw, p.color_leg);
+                list.segment(w[0], w[1], lw, color_leg);
             }
             for &j in &joints[1..] {
-                list.dot(j, p.joint_dot, p.color_joint);
+                list.dot(j, p.joint_dot, color_joint);
             }
         }
         LegStyle::Curve => {
             let mut prev = joints[0];
             for_each_curve_point(joints, |pt, frac| {
-                list.segment(prev, pt, lw * taper(frac), p.color_leg);
+                list.segment(prev, pt, lw * taper(frac), color_leg);
                 prev = pt;
             });
         }
@@ -39,7 +52,7 @@ pub fn draw_leg(list: &mut DrawList, joints: &[Vec2], p: &Preset) {
                 let len = prev.distance(pt);
                 while walked + len >= next_at && len > 0.0 {
                     let c = prev.lerp(pt, (next_at - walked) / len);
-                    list.dot(c, lw * 0.8 * taper(frac), p.color_leg);
+                    list.dot(c, lw * 0.8 * taper(frac), color_leg);
                     next_at += DOT_SPACING;
                 }
                 walked += len;
@@ -48,7 +61,7 @@ pub fn draw_leg(list: &mut DrawList, joints: &[Vec2], p: &Preset) {
         }
     }
     if p.legs.style != LegStyle::Straight {
-        list.dot(foot, p.joint_dot, p.color_joint);
+        list.dot(foot, p.joint_dot, color_joint);
     }
 }
 

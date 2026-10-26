@@ -12,11 +12,14 @@ use std::ffi::c_void;
 
 use glam::Vec2;
 use windows_sys::Win32::Foundation::{HWND, POINT};
+use windows_sys::Win32::UI::Input::KeyboardAndMouse::{
+    GetAsyncKeyState, VK_CONTROL, VK_LWIN, VK_MENU, VK_RWIN, VK_SHIFT,
+};
 use windows_sys::Win32::UI::WindowsAndMessaging::{
     GetCursorPos, GetSystemMetrics, GetWindowLongPtrW, SetLayeredWindowAttributes,
     SetWindowLongPtrW, SetWindowPos, GWL_EXSTYLE, HWND_TOPMOST, LWA_ALPHA, SM_CXVIRTUALSCREEN,
-    SM_CYVIRTUALSCREEN, SM_XVIRTUALSCREEN, SM_YVIRTUALSCREEN, SWP_NOACTIVATE, SWP_SHOWWINDOW,
-    WS_EX_LAYERED, WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW, WS_EX_TRANSPARENT,
+    SM_CYVIRTUALSCREEN, SM_XVIRTUALSCREEN, SM_YVIRTUALSCREEN, SWP_FRAMECHANGED, SWP_NOACTIVATE,
+    SWP_NOMOVE, SWP_NOSIZE, SWP_SHOWWINDOW, WS_EX_LAYERED, WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW, WS_EX_TRANSPARENT,
 };
 use winit::dpi::{PhysicalPosition, PhysicalSize};
 use winit::event::InnerSizeWriter;
@@ -162,14 +165,80 @@ impl Composition {
     }
 }
 
-// --- Плеть (реализует агент платформы, W0 + W2c; сейчас заглушки) ---
+// --- Плеть ---
 
-/// Удерживается ли хоткей плети прямо сейчас. Опрос, без событий; вызывается каждый кадр.
-pub fn hotkey_held(_hotkey: &crate::settings::Hotkey) -> bool {
-    false
+/// Удерживается ли хоткей плети прямо сейчас. Опрос `GetAsyncKeyState`, разрешений не нужно.
+/// Модификаторы должны совпасть точно (см. `keys::mods_match`); `cmd` = левая или правая Win.
+pub fn hotkey_held(hotkey: &crate::settings::Hotkey) -> bool {
+    use super::keys;
+    // Старший бит = клавиша зажата сейчас.
+    // SAFETY: GetAsyncKeyState без побочных эффектов.
+    let down = |vk: u16| unsafe { GetAsyncKeyState(vk as i32) } as u16 & 0x8000 != 0;
+    let mods = keys::Mods {
+        ctrl: down(VK_CONTROL),
+        alt: down(VK_MENU),
+        shift: down(VK_SHIFT),
+        cmd: down(VK_LWIN) || down(VK_RWIN),
+    };
+    let mut held = keys::mods_match(hotkey, mods);
+    if held {
+        if let Some(name) = &hotkey.key {
+            held = match keys::win_vk(name) {
+                Some(vk) => down(vk),
+                None => {
+                    keys::warn_unknown_key(name);
+                    false
+                }
+            };
+        }
+    }
+    keys::report(hotkey, held)
+}
+
+thread_local! {
+    static CAPTURE_ON: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
 }
 
 /// Режим плети: `on` — оверлей принимает клики (ЛКМ/ПКМ не доходят до приложений под ним),
-/// системный курсор скрыт, фокус активного приложения не отнимается (или возвращается при `false`).
-/// `off` — всё как было: клики насквозь, курсор виден.
-pub fn set_whip_capture(_window: &Window, _on: bool) {}
+/// системный курсор над оверлеем скрыт; `off` — клики насквозь, курсор виден.
+/// Фокус не уходит вовсе: `WS_EX_NOACTIVATE` — клик по окну его не активирует.
+pub fn set_whip_capture(window: &Window, on: bool) {
+    use super::input_debug;
+    if CAPTURE_ON.replace(on) == on {
+        return;
+    }
+    if !on {
+        window.set_cursor_visible(true);
+    }
+    // winit пересобирает GWL_EXSTYLE целиком (теряются TOOLWINDOW/NOACTIVATE, а при
+    // hittest=true и LAYERED) — сразу ставим наши стили обратно.
+    let _ = window.set_cursor_hittest(on);
+    let hwnd = hwnd(window);
+    // SAFETY: hwnd — живое окно этого потока.
+    unsafe {
+        let ex = GetWindowLongPtrW(hwnd, GWL_EXSTYLE) as u32;
+        let mut ex = ex | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE | WS_EX_LAYERED;
+        if on {
+            ex &= !WS_EX_TRANSPARENT;
+        } else {
+            ex |= WS_EX_TRANSPARENT;
+        }
+        SetWindowLongPtrW(hwnd, GWL_EXSTYLE, ex as isize);
+        SetLayeredWindowAttributes(hwnd, 0, 255, LWA_ALPHA);
+        SetWindowPos(
+            hwnd,
+            HWND_TOPMOST,
+            0,
+            0,
+            0,
+            0,
+            SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_FRAMECHANGED,
+        );
+    }
+    if on {
+        // winit прячет курсор (ShowCursor), когда он внутри клиентской области — т.е. с
+        // первого WM_MOUSEMOVE после снятия WS_EX_TRANSPARENT.
+        window.set_cursor_visible(false);
+    }
+    input_debug!("захват {}", if on { "ВКЛ" } else { "ВЫКЛ" });
+}

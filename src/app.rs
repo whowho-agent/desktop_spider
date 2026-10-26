@@ -4,15 +4,18 @@ use std::time::{Duration, Instant};
 use glam::Vec2;
 use tray_icon::menu::MenuEvent;
 use winit::application::ApplicationHandler;
-use winit::event::WindowEvent;
+use winit::event::{ElementState, MouseButton, WindowEvent};
 use winit::event_loop::{ActiveEventLoop, ControlFlow};
 use winit::window::{Window, WindowId};
 
 use crate::config::{self, Preset, PresetWatcher};
+use crate::input::WhipInput;
 use crate::platform;
 use crate::render::{DrawList, Renderer};
+use crate::settings::{Mode, Settings};
 use crate::sim::Creature;
 use crate::tray::{Tray, TrayAction};
+use crate::whip::{Whip, WhipEvent};
 
 /// Шаг симуляции: 120 Гц, независимо от частоты кадров.
 const STEP: f32 = 1.0 / 120.0;
@@ -55,6 +58,15 @@ struct State {
     cursor: Vec2,
     last_move: Instant,
     next_idle_tick: Instant,
+
+    settings: Settings,
+    whip: Whip,
+    whip_events: Vec<WhipEvent>,
+    /// Ввод плети: `held` — хоткей зажат (и режим не «Паук»), кнопки — из событий окна при захвате.
+    input: WhipInput,
+    /// Счёт текущей сессии режима: попадания и удары.
+    hits: u32,
+    strikes: u32,
 }
 
 impl ApplicationHandler<UserEvent> for App {
@@ -69,7 +81,11 @@ impl ApplicationHandler<UserEvent> for App {
         let mut renderer = Renderer::new(window.clone());
         renderer.resize(window.inner_size(), window.scale_factor());
 
-        let mut name = std::env::var("SPIDER_PRESET").unwrap_or_else(|_| "spider".into());
+        let settings = Settings::load();
+        let mut name = std::env::var("SPIDER_PRESET")
+            .ok()
+            .or_else(|| Some(settings.preset.clone()).filter(|p| !p.is_empty()))
+            .unwrap_or_else(|| "spider".into());
         let preset = config::load_preset(&name).unwrap_or_else(|e| {
             eprintln!("пресет {name}: {e}; беру встроенный");
             let p = Preset::default();
@@ -77,13 +93,17 @@ impl ApplicationHandler<UserEvent> for App {
             p
         });
         let cursor = platform::cursor_position(&window);
-        let creature = Creature::new(&preset, cursor);
+        let mut creature = Creature::new(&preset, cursor);
+        creature.set_game(settings.mode == Mode::Game);
         let debug = std::env::var_os("SPIDER_DEBUG").is_some();
 
         // Меню-бар / трей: только на главном потоке после старта цикла, т.е. здесь.
         let tray = Tray::new(&config::list_presets(), &name, debug)
             .map_err(|e| eprintln!("иконка в меню-баре не создана: {e}"))
             .ok();
+        if let Some(t) = &tray {
+            t.set_settings(&settings);
+        }
 
         window.request_redraw();
         let now = Instant::now();
@@ -103,7 +123,16 @@ impl ApplicationHandler<UserEvent> for App {
             cursor,
             last_move: now,
             next_idle_tick: now,
+            settings,
+            whip: Whip::new(cursor),
+            whip_events: Vec::new(),
+            input: WhipInput::default(),
+            hits: 0,
+            strikes: 0,
         });
+        if let Some(s) = self.state.as_ref() {
+            s.show_score();
+        }
     }
 
     fn window_event(&mut self, event_loop: &ActiveEventLoop, _id: WindowId, event: WindowEvent) {
@@ -114,6 +143,16 @@ impl ApplicationHandler<UserEvent> for App {
             WindowEvent::ScaleFactorChanged { scale_factor, mut inner_size_writer } => {
                 platform::on_scale_factor_changed(&s.window, &mut inner_size_writer);
                 s.renderer.resize(s.window.inner_size(), scale_factor)
+            }
+            // Кнопки приходят, только пока оверлей захватывает мышь (хоткей плети зажат).
+            WindowEvent::MouseInput { state, button, .. } if s.input.held => {
+                let down = state == ElementState::Pressed;
+                match button {
+                    MouseButton::Left => s.input.lmb = down,
+                    MouseButton::Right => s.input.rmb = down,
+                    _ => {}
+                }
+                s.window.request_redraw();
             }
             WindowEvent::RedrawRequested => {
                 s.frame();
@@ -151,8 +190,15 @@ impl ApplicationHandler<UserEvent> for App {
                 s.acc = 0.0;
                 s.last_move = s.last;
             }
-            // Подключаются на этапе W3.
-            TrayAction::Mode(_) | TrayAction::Skin(_) | TrayAction::Hotkey(_) => {}
+            TrayAction::Mode(m) => s.set_mode(m),
+            TrayAction::Skin(skin) => {
+                s.settings.whip_skin = skin;
+                s.save_settings();
+            }
+            TrayAction::Hotkey(hk) => {
+                s.settings.whip_hotkey = hk;
+                s.save_settings();
+            }
             TrayAction::Debug(on) => {
                 s.debug = on;
                 if let Some(t) = &s.tray {
@@ -181,6 +227,10 @@ impl ApplicationHandler<UserEvent> for App {
 
         let was_active = s.is_active(now);
         s.track_cursor(now);
+        // Хоткей опрашивается и в idle: зажал — сразу полная частота кадров.
+        if s.poll_hotkey() {
+            s.last_move = now;
+        }
         if s.is_active(now) {
             // Курсор сдвинулся после idle → сразу назад к vsync-кадрам.
             if !was_active {
@@ -203,11 +253,21 @@ impl State {
         self.track_cursor(now);
         let cursor = self.cursor;
 
+        self.poll_hotkey();
+        let mode = self.settings.mode;
+
         if !self.paused {
             // dt ограничен сверху, так что редкие idle-кадры не ломают аккумулятор.
             self.acc += (now - self.last).as_secs_f32().min(MAX_FRAME_DT);
             while self.acc >= STEP {
-                self.creature.update(STEP, cursor);
+                if mode != Mode::Whip {
+                    self.creature.update(STEP, cursor);
+                }
+                if mode != Mode::Spider {
+                    let target = (mode == Mode::Game).then(|| self.creature.position());
+                    self.whip.update(STEP, cursor, self.input, target, &mut self.whip_events);
+                    self.handle_whip_events(cursor);
+                }
                 self.acc -= STEP;
             }
         }
@@ -215,16 +275,109 @@ impl State {
 
         self.list.clear();
         // Кольцо остановки вокруг курсора — только в отладке, как цели ступней.
-        if self.debug {
+        if self.debug && mode != Mode::Whip {
             self.list.ring(cursor, self.preset.body.stop_radius, 1.0, self.preset.color_ring);
         }
-        self.creature.draw(&mut self.list, self.debug);
+        if mode != Mode::Whip {
+            self.creature.draw(&mut self.list, self.debug);
+        }
+        if mode != Mode::Spider {
+            // Плеть видна, пока зажат хоткей; эффекты (вспышки, следы) догорают и без него.
+            self.whip.draw(&mut self.list, self.settings.whip_skin, self.input.held);
+        }
         self.renderer.render(&self.list);
     }
 
-    /// Активный режим: курсор двигался недавно.
+    /// Активный режим: курсор двигался недавно, зажата плеть или догорают её эффекты.
     fn is_active(&self, now: Instant) -> bool {
-        !self.paused && now.duration_since(self.last_move) < IDLE_AFTER
+        !self.paused
+            && (now.duration_since(self.last_move) < IDLE_AFTER
+                || self.input.held
+                || (self.settings.mode != Mode::Spider && self.whip.is_animating()))
+    }
+
+    /// Опрашивает хоткей; на переходах включает/выключает захват мыши. Возвращает «только что зажали».
+    fn poll_hotkey(&mut self) -> bool {
+        let held = self.settings.mode != Mode::Spider && !self.paused && platform::hotkey_held(&self.settings.whip_hotkey);
+        if held == self.input.held {
+            return false;
+        }
+        self.input.held = held;
+        if !held {
+            self.input.lmb = false;
+            self.input.rmb = false;
+        } else if !self.whip.is_animating() {
+            self.whip.reset(self.cursor);
+        }
+        platform::set_whip_capture(&self.window, held);
+        held
+    }
+
+    fn handle_whip_events(&mut self, cursor: Vec2) {
+        let mode = self.settings.mode;
+        let mut score_changed = false;
+        for ev in self.whip_events.drain(..) {
+            match ev {
+                WhipEvent::Crack { pos, dir, big } => {
+                    self.strikes += 1;
+                    score_changed = true;
+                    match mode {
+                        Mode::Game => {
+                            if self.creature.strike(pos, big) {
+                                self.hits += 1;
+                            }
+                        }
+                        Mode::Whip => self.whip.fx_mut().welt(pos, dir, big),
+                        Mode::Spider => {}
+                    }
+                }
+                WhipEvent::Caught => {
+                    self.creature.grab();
+                    self.hits += 1;
+                    score_changed = true;
+                }
+                WhipEvent::Hold { pos } => self.creature.hold_at(pos),
+                WhipEvent::Released => self.creature.release(cursor),
+            }
+        }
+        if score_changed {
+            self.show_score();
+        }
+    }
+
+    /// Счёт у иконки меню-бара / в подсказке трея; только в режиме «Игра».
+    fn show_score(&self) {
+        let Some(t) = &self.tray else { return };
+        if self.settings.mode == Mode::Game {
+            t.set_score(Some(&format!("{} / {}", self.hits, self.strikes)));
+        } else {
+            t.set_score(None);
+        }
+    }
+
+    fn set_mode(&mut self, mode: Mode) {
+        if mode == self.settings.mode {
+            return;
+        }
+        self.settings.mode = mode;
+        self.creature.set_game(mode == Mode::Game);
+        self.whip.fx_mut().clear();
+        self.hits = 0;
+        self.strikes = 0;
+        if mode == Mode::Spider && self.input.held {
+            self.input = WhipInput::default();
+            platform::set_whip_capture(&self.window, false);
+        }
+        self.last_move = Instant::now();
+        self.save_settings();
+        self.show_score();
+    }
+
+    fn save_settings(&self) {
+        self.settings.save();
+        if let Some(t) = &self.tray {
+            t.set_settings(&self.settings);
+        }
     }
 
     fn track_cursor(&mut self, now: Instant) {
@@ -243,6 +396,10 @@ impl State {
                 self.creature.set_preset(&p);
                 self.preset = p;
                 self.preset_name = name.to_string();
+                if self.settings.preset != name {
+                    self.settings.preset = name.to_string();
+                    self.save_settings();
+                }
                 // Новые ноги должны успеть встать на место, даже если курсор стоит.
                 self.last_move = Instant::now();
             }

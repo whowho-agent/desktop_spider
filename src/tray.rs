@@ -1,4 +1,5 @@
-//! Иконка в меню-баре (macOS) / трее (Windows): выбор пресета, пауза, отладка, выход.
+//! Иконка в меню-баре (macOS) / трее (Windows): режим, плеть (цвет, хоткей), пресет, пауза,
+//! отладка, выход; счёт игры в заголовке (macOS) / подсказке (Windows).
 //!
 //! События меню приходят из muda через `MenuEvent::set_event_handler`
 //! (ставится в `main.rs`) и пересылаются в winit как `UserEvent::Menu`.
@@ -9,6 +10,17 @@ use tray_icon::menu::accelerator::Accelerator;
 use tray_icon::menu::accelerator::{Code, Modifiers};
 use tray_icon::menu::{CheckMenuItem, Menu, MenuEvent, MenuItem, PredefinedMenuItem, Submenu};
 use tray_icon::{Icon, TrayIcon, TrayIconBuilder};
+
+use crate::settings::{Hotkey, Mode, Settings, WhipSkin};
+use std::cell::Cell;
+
+/// Готовые сочетания хоткея в меню: ⌃⌥, ⌃⇧, ⌥⇧, ⌃⌥⇧.
+const HOTKEY_PRESETS: [Hotkey; 4] = [
+    Hotkey::mods(true, true, false, false),
+    Hotkey::mods(true, false, true, false),
+    Hotkey::mods(false, true, true, false),
+    Hotkey::mods(true, true, true, false),
+];
 
 /// Что пользователь выбрал в меню.
 #[derive(Debug)]
@@ -34,6 +46,15 @@ pub struct Tray {
     debug: CheckMenuItem,
     reload: MenuItem,
     quit: MenuItem,
+    /// Радиогруппа режимов.
+    modes: Vec<(Mode, CheckMenuItem)>,
+    /// Радиогруппа цветов плети.
+    skins: Vec<(WhipSkin, CheckMenuItem)>,
+    hotkey_menu: Submenu,
+    hotkeys: Vec<(Hotkey, CheckMenuItem)>,
+    /// «Своё: …» — неактивный пункт с галочкой, если хоткей из config.toml не из списка.
+    custom_hotkey: CheckMenuItem,
+    custom_shown: Cell<bool>,
 }
 
 impl Tray {
@@ -45,8 +66,54 @@ impl Tray {
         let reload = MenuItem::new("Перезагрузить пресеты", true, None);
         let quit = MenuItem::new("Выход", true, quit_accelerator());
 
+        // Режим: три check-пункта, ведут себя как радиокнопки.
+        let mode_menu = Submenu::new("Режим", true);
+        let modes: Vec<(Mode, CheckMenuItem)> = [
+            (Mode::Spider, "Паук"),
+            (Mode::Game, "Игра: попади по пауку"),
+            (Mode::Whip, "Просто плеть"),
+        ]
+        .into_iter()
+        .map(|(m, t)| (m, CheckMenuItem::new(t, true, m == Mode::default(), None)))
+        .collect();
+        for (_, item) in &modes {
+            mode_menu.append(item).map_err(|e| e.to_string())?;
+        }
+
+        // Плеть: цвет + подменю хоткея.
+        let whip_menu = Submenu::new("Плеть", true);
+        let skins: Vec<(WhipSkin, CheckMenuItem)> = [(WhipSkin::Light, "Светлая"), (WhipSkin::Black, "Чёрная")]
+            .into_iter()
+            .map(|(k, t)| (k, CheckMenuItem::new(t, true, k == WhipSkin::default(), None)))
+            .collect();
+        let hotkey_menu = Submenu::new("Хоткей (удерживать)", true);
+        let hotkeys: Vec<(Hotkey, CheckMenuItem)> = HOTKEY_PRESETS
+            .iter()
+            .map(|h| (h.clone(), CheckMenuItem::new(h.label(), true, *h == Hotkey::default(), None)))
+            .collect();
+        for (_, item) in &hotkeys {
+            hotkey_menu.append(item).map_err(|e| e.to_string())?;
+        }
+        // Пункт «Своё» вставляется после пресетов только когда нужен (см. set_settings).
+        let custom_hotkey = CheckMenuItem::new("Своё", false, true, None);
+        hotkey_menu
+            .append_items(&[
+                &PredefinedMenuItem::separator(),
+                &MenuItem::new("Изменить: config.toml", false, None),
+            ])
+            .map_err(|e| e.to_string())?;
+        for (_, item) in &skins {
+            whip_menu.append(item).map_err(|e| e.to_string())?;
+        }
+        whip_menu
+            .append_items(&[&PredefinedMenuItem::separator(), &hotkey_menu])
+            .map_err(|e| e.to_string())?;
+
         let menu = Menu::new();
         menu.append_items(&[
+            &mode_menu,
+            &whip_menu,
+            &PredefinedMenuItem::separator(),
             &presets_menu,
             &pause,
             &debug,
@@ -75,6 +142,12 @@ impl Tray {
             debug,
             reload,
             quit,
+            modes,
+            skins,
+            hotkey_menu,
+            hotkeys,
+            custom_hotkey,
+            custom_shown: Cell::new(false),
         };
         tray.set_presets(presets, current);
         Ok(tray)
@@ -122,6 +195,18 @@ impl Tray {
         }
         if id == self.quit.id() {
             return Some(TrayAction::Quit);
+        }
+        // Радиогруппы: muda сама переключила галочку (и могла снять её с уже выбранного) —
+        // сразу выставляем одну галочку у нажатого.
+        if let Some(m) = pick(&self.modes, id) {
+            return Some(TrayAction::Mode(m));
+        }
+        if let Some(k) = pick(&self.skins, id) {
+            return Some(TrayAction::Skin(k));
+        }
+        if let Some(h) = pick(&self.hotkeys, id) {
+            self.show_custom_hotkey(None);
+            return Some(TrayAction::Hotkey(h));
         }
         self.presets
             .iter()
@@ -202,11 +287,66 @@ fn glyph_icon(outlined: bool) -> Icon {
     Icon::from_rgba(rgba, N as u32, N as u32).expect("icon rgba")
 }
 
-// Контракт для агента настроек/меню (W2d); сейчас заглушки.
+/// Если `id` из группы — отмечает только его и возвращает значение.
+fn pick<T: Clone>(group: &[(T, CheckMenuItem)], id: &tray_icon::menu::MenuId) -> Option<T> {
+    let value = group.iter().find(|(_, item)| id == item.id())?.0.clone();
+    for (_, item) in group {
+        item.set_checked(id == item.id());
+    }
+    Some(value)
+}
+
 impl Tray {
-    /// Отметить текущие режим, цвет и хоткей в меню.
-    pub fn set_settings(&self, _s: &crate::settings::Settings) {}
+    /// Отметить текущие режим, цвет и хоткей в меню. Вызывать сразу после `new`
+    /// и после каждого изменения настроек.
+    pub fn set_settings(&self, s: &Settings) {
+        for (m, item) in &self.modes {
+            item.set_checked(*m == s.mode);
+        }
+        for (k, item) in &self.skins {
+            item.set_checked(*k == s.whip_skin);
+        }
+        let mut known = false;
+        for (h, item) in &self.hotkeys {
+            item.set_checked(*h == s.whip_hotkey);
+            known |= *h == s.whip_hotkey;
+        }
+        self.show_custom_hotkey((!known).then_some(&s.whip_hotkey));
+    }
+
+    /// Показать «Своё: <хоткей> (config.toml)» после пресетов или убрать (`None`).
+    fn show_custom_hotkey(&self, h: Option<&Hotkey>) {
+        match h {
+            Some(h) => {
+                self.custom_hotkey.set_text(format!("Своё: {} (config.toml)", h.label()));
+                self.custom_hotkey.set_checked(true);
+                if !self.custom_shown.get() {
+                    let _ = self.hotkey_menu.insert(&self.custom_hotkey, self.hotkeys.len());
+                    self.custom_shown.set(true);
+                }
+            }
+            None => {
+                if self.custom_shown.get() {
+                    let _ = self.hotkey_menu.remove(&self.custom_hotkey);
+                    self.custom_shown.set(false);
+                }
+            }
+        }
+    }
 
     /// Счёт игры: заголовок у иконки (macOS) / подсказка (Windows). `None` — убрать.
-    pub fn set_score(&self, _text: Option<&str>) {}
+    pub fn set_score(&self, text: Option<&str>) {
+        #[cfg(target_os = "macos")]
+        self._icon.set_title(text);
+        #[cfg(not(target_os = "macos"))]
+        {
+            let tip = match text {
+                Some(t) => format!("Desktop Spider — {t}"),
+                None => "Desktop Spider".to_string(),
+            };
+            if let Err(e) = self._icon.set_tooltip(Some(tip)) {
+                eprintln!("tray: set_tooltip: {e}");
+            }
+        }
+    }
 }

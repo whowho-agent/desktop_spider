@@ -15,6 +15,9 @@ const POLE_RATE: f32 = 80.0;
 /// Проходы сглаживания цепочек 3+ и их сила.
 const SMOOTH_PASSES: usize = 2;
 const SMOOTH_K: f32 = 0.5;
+/// Поджатая ступня: доля `rest_dist` от бедра и скорость подтягивания, 1/с.
+const CURL_DIST: f32 = 0.4;
+const CURL_RATE: f32 = 22.0;
 
 #[derive(Clone, Copy)]
 pub enum LegState {
@@ -90,20 +93,57 @@ impl Leg {
     }
 
     /// Обновляет идеал и анимацию шага, затем решает IK.
+    #[cfg(test)]
     pub fn update(&mut self, dt: f32, body: &Body, lp: &LegParams) {
+        self.update_scaled(dt, body, lp, 1.0);
+    }
+
+    /// То же, но длительность шага умножена на `step_scale` (на быстром бегстве < 1).
+    pub fn update_scaled(&mut self, dt: f32, body: &Body, lp: &LegParams, step_scale: f32) {
         self.ideal = self.compute_ideal(body, lp);
+        if step_scale < 1.0 {
+            // Быстрее обычного (бегство, уворот): упреждение не должно уводить идеал за досягаемость.
+            let hip = self.hip(body);
+            let reach: f32 = lp.segments.iter().sum();
+            self.ideal = hip + (self.ideal - hip).clamp_length_max(reach * 0.95);
+        }
         match &mut self.state {
             LegState::Planted { foot } => self.foot = *foot,
             LegState::Stepping { from, t } => {
-                *t += dt / lp.step_duration;
+                *t += dt / (lp.step_duration * step_scale);
                 if *t >= 1.0 {
                     self.foot = self.ideal;
                     self.state = LegState::Planted { foot: self.ideal };
                 } else {
-                    self.foot = from.lerp(self.ideal, ease_in_out(*t));
+                    let foot = from.lerp(self.ideal, ease_in_out(*t));
+                    // На быстром беге/после рывка начало шага бывает дальше досягаемости:
+                    // ведём ступню по краю досягаемости (FABRIK и так вытянул бы прямо).
+                    let hip = self.hip(body);
+                    let reach: f32 = lp.segments.iter().sum();
+                    self.foot = hip + (foot - hip).clamp_length_max(reach);
                 }
             }
         }
+        self.solve(body, lp, 1.0 - (-POLE_RATE * dt).exp());
+    }
+
+    /// Поджатая нога (оглушение, захлёст): ступня тянется к точке у тела, `wiggle` —
+    /// поворот этой точки вокруг бедра (дрыгание), рад. Ступня всегда в досягаемости.
+    pub fn update_curled(&mut self, dt: f32, body: &Body, lp: &LegParams, wiggle: f32) {
+        self.ideal = self.compute_ideal(body, lp);
+        let hip = self.hip(body);
+        let dir = body.forward().rotate(self.rest_dir).rotate(Vec2::from_angle(wiggle * self.bend));
+        let reach: f32 = lp.segments.iter().sum();
+        let curled = hip + dir * (lp.rest_dist * CURL_DIST).min(reach * 0.6);
+        let k = 1.0 - (-CURL_RATE * dt).exp();
+        let mut foot = self.foot.lerp(curled, k);
+        // Тело могли телепортировать — не даём ноге вытянуться за предел.
+        foot = hip + (foot - hip).clamp_length_max(reach * 0.95);
+        if !foot.is_finite() {
+            foot = curled;
+        }
+        self.foot = foot;
+        self.state = LegState::Planted { foot };
         self.solve(body, lp, 1.0 - (-POLE_RATE * dt).exp());
     }
 

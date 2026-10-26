@@ -25,19 +25,31 @@ impl Body {
     }
 
     pub fn update(&mut self, dt: f32, target: Vec2, p: &BodyParams) {
+        let desired = self.chase_desired(target, p);
+        self.steer(dt, desired, p.max_accel, p.turn_rate, target);
+    }
+
+    /// Желаемая скорость погони за курсором (arrive до кольца `stop_radius`).
+    pub fn chase_desired(&self, target: Vec2, p: &BodyParams) -> Vec2 {
         let to = target - self.pos;
-        let dist = to.length();
-        let k = smoothstep(p.stop_radius, p.slow_radius, dist);
-        let desired = to.normalize_or_zero() * p.max_speed * k;
-        self.vel += (desired - self.vel).clamp_length_max(p.max_accel * dt);
+        let k = smoothstep(p.stop_radius, p.slow_radius, to.length());
+        to.normalize_or_zero() * p.max_speed * k
+    }
+
+    /// Разгон к `desired` с ограничением ускорения, интеграция и поворот.
+    /// Стоя на месте, паук разворачивается мордой к `face`.
+    pub fn steer(&mut self, dt: f32, desired: Vec2, accel: f32, turn_rate: f32, face: Vec2) {
+        // Направление на `face` — до сдвига, как в исходной погоне.
+        let to = face - self.pos;
+        self.vel += (desired - self.vel).clamp_length_max(accel * dt);
         self.pos += self.vel * dt;
 
         let speed = self.vel.length();
         if speed > 5.0 {
-            self.turn_toward(self.vel.to_angle(), p.turn_rate * dt);
-        } else if dist > 1.0 {
+            self.turn_toward(self.vel.to_angle(), turn_rate * dt);
+        } else if to.length() > 1.0 {
             // Стоим: неспешно разворачиваемся мордой к курсору.
-            self.turn_toward(to.to_angle(), p.turn_rate * 0.25 * dt);
+            self.turn_toward(to.to_angle(), turn_rate * 0.25 * dt);
         }
     }
 
@@ -47,7 +59,7 @@ impl Body {
     }
 }
 
-fn smoothstep(e0: f32, e1: f32, x: f32) -> f32 {
+pub fn smoothstep(e0: f32, e1: f32, x: f32) -> f32 {
     let t = ((x - e0) / (e1 - e0)).clamp(0.0, 1.0);
     t * t * (3.0 - 2.0 * t)
 }
