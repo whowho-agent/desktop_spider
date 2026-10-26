@@ -85,13 +85,18 @@ pub struct Whip {
     /// курсор и цель делятся на scale на входе, точки событий и позы умножаются на выходе.
     /// Так при любом размере удар занимает то же время, просто плеть крупнее и бьёт дальше.
     scale: f32,
+    /// Поза на начало последнего шага физики: кадр рисует позу между ней и текущей
+    /// (кадры экрана не совпадают с шагами 1/120 с — без этого быстрый удар дёргается).
+    prev_rope: [Vec2; rope::N],
+    prev_hand: Vec2,
+    prev_angle: f32,
 }
 
 impl Whip {
     pub fn new(cursor: Vec2) -> Self {
         let hand = Hand::new(AIM0);
         let rope = Rope::hanging(hand.tip(cursor));
-        Self {
+        let mut w = Self {
             fx: fx::Fx::default(),
             hand,
             rope,
@@ -104,7 +109,12 @@ impl Whip {
             hold: cursor,
             quiet: QUIET,
             scale: 1.0,
-        }
+            prev_rope: [Vec2::ZERO; rope::N],
+            prev_hand: cursor,
+            prev_angle: AIM0,
+        };
+        w.snapshot();
+        w
     }
 
     /// Сбросить хлыст висящим под курсором (при включении плети).
@@ -138,6 +148,7 @@ impl Whip {
         self.since_move = 0.0;
         self.quiet = QUIET;
         self.rope.reset(self.hand.tip(cursor));
+        self.snapshot();
     }
 
     /// Шаг физики. `dt` — шаг сима (1/120), внутри 2 подшага по 1/240.
@@ -145,6 +156,7 @@ impl Whip {
     /// События дописываются в `events`.
     pub fn update(&mut self, dt: f32, cursor: Vec2, input: WhipInput, target: Option<Vec2>, events: &mut Vec<WhipEvent>) {
         self.fx.update(dt);
+        self.snapshot();
         // В эталонные единицы.
         let cursor = cursor / self.scale;
         let target = target.map(|t| t / self.scale);
@@ -276,16 +288,26 @@ impl Whip {
 
     /// Рисует плеть (если `visible`) и эффекты.
     /// `pal` — палитра кожи (`skin::leather_palette`), `light` — направление на свет (для тени).
-    pub fn draw(&self, list: &mut DrawList, pal: &skin::LeatherPalette, light: Vec2, visible: bool) {
+    /// Запомнить позу перед шагом (для интерполяции в `draw`).
+    fn snapshot(&mut self) {
+        self.prev_rope = self.rope.p;
+        self.prev_hand = self.hand.pos(self.cursor);
+        self.prev_angle = self.hand.angle;
+    }
+
+    /// `alpha` 0..1 — где кадр между началом и концом последнего шага физики.
+    pub fn draw(&self, list: &mut DrawList, pal: &skin::LeatherPalette, light: Vec2, visible: bool, alpha: f32) {
         // Порядок слоёв: следы под плетью, вспышки щелчков поверх.
         self.fx.draw_welts(list);
         if visible {
             // Из эталонных единиц в мировые.
             let k = self.scale;
-            let rope: [Vec2; rope::N] = std::array::from_fn(|i| self.rope.p[i] * k);
+            let a = alpha.clamp(0.0, 1.0);
+            let rope: [Vec2; rope::N] = std::array::from_fn(|i| self.prev_rope[i].lerp(self.rope.p[i], a) * k);
+            let da = (self.hand.angle - self.prev_angle + std::f32::consts::PI).rem_euclid(std::f32::consts::TAU) - std::f32::consts::PI;
             let pose = WhipPose {
-                hand: self.hand.pos(self.cursor) * k,
-                angle: self.hand.angle,
+                hand: self.prev_hand.lerp(self.hand.pos(self.cursor), a) * k,
+                angle: self.prev_angle + da * a,
                 rope: &rope,
                 charge: self.hand.charge(),
                 scale: k,

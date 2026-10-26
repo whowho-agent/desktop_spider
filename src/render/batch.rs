@@ -74,6 +74,20 @@ impl DrawList {
         self.push_styled(a, b, width * 0.5, color, kind::BRAID, fitted);
     }
 
+    /// Плетёная трубка со сквозной фазой узора: `phase` — сколько периодов прядей уже прошло
+    /// от начала хлыста до `a`. Так узор непрерывен вдоль цепочки отрезков, даже если шаг меняется.
+    pub fn braid_phase(&mut self, a: Vec2, b: Vec2, width: f32, color: [f32; 4], period: f32, phase: f32) {
+        self.shapes.push(Shape {
+            a: a.to_array(),
+            b: b.to_array(),
+            radius: width * 0.5,
+            // Шейдер берёт фазу в pt из ring_width: u = (вдоль + фаза) / период.
+            ring_width: phase * period,
+            style: [kind::BRAID, period],
+            color,
+        });
+    }
+
     /// Металлическая трубка (кольца, навершие сбоку).
     pub fn metal(&mut self, a: Vec2, b: Vec2, width: f32, color: [f32; 4]) {
         self.push_styled(a, b, width * 0.5, color, kind::METAL, 0.0);

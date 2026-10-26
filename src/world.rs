@@ -114,7 +114,8 @@ impl World {
     }
 
     /// `whip_visible` — плеть вместо курсора (хоткей зажат); эффекты рисуются всегда.
-    pub fn draw(&self, list: &mut DrawList, preset: &Preset, cursor: Vec2, whip_visible: bool, debug: bool) {
+    /// `alpha` — доля шага физики, прошедшая к моменту кадра (интерполяция плети).
+    pub fn draw(&self, list: &mut DrawList, preset: &Preset, cursor: Vec2, whip_visible: bool, debug: bool, alpha: f32) {
         // Кольцо остановки вокруг курсора — только в отладке, как цели ступней.
         if debug && self.mode != Mode::Whip {
             list.ring(cursor, preset.body.stop_radius, 1.0, preset.color_ring);
@@ -123,7 +124,7 @@ impl World {
             self.creature.draw(list, debug);
         }
         if self.mode != Mode::Spider {
-            self.whip.draw(list, &self.pal, self.light.dir(), whip_visible);
+            self.whip.draw(list, &self.pal, self.light.dir(), whip_visible, alpha);
         }
     }
 }

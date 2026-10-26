@@ -262,13 +262,19 @@ fn fs_main(in: VsOut) -> @location(0) vec4<f32> {
     if (len > 1e-4) {
         dir = ba / len;
     }
-    var n = vec2<f32>(-dir.y, dir.x);
-    if (dot(n, g.light) < 0.0) {
-        n = -n;
-    }
+    // Нормаль НЕ разворачиваем к свету: иначе у звеньев почти вдоль света блик перескакивал
+    // с края на край. Освещение считаем как у настоящего цилиндра (см. lit ниже) — оно
+    // непрерывно при любом повороте, и соседние отрезки хлыста стыкуются без скачков.
+    let n = vec2<f32>(-dir.y, dir.x);
     let r = max(in.rr.x, 1e-4);
-    // Поперёк: -1 тень, +1 свет; у круглых концов та же проекция.
+    // Поперёк: -1..1; у круглых концов та же проекция.
     let v = clamp(dot(pa, n) / r, -1.0, 1.0);
+    // Нормаль поверхности цилиндра в этой точке и свет сверху-сбоку (z — к зрителю).
+    let nz = sqrt(max(0.0, 1.0 - v * v));
+    let l3 = normalize(vec3<f32>(g.light * 0.8, 0.6));
+    let lit = dot(vec3<f32>(n * v, nz), l3);
+    // Для пряди «к свету» — знак стороны, плавно уходящий в 0, когда звено вдоль света.
+    let side = clamp(dot(n, g.light) * 4.0, -1.0, 1.0);
     // Вдоль оси от a (+ фаза в ring_width, pt), в периодах оплётки.
     let u = (dot(pa, dir) + in.rr.y) / max(in.style.y, 1e-4);
     let du = fwidth(u);
@@ -314,13 +320,16 @@ fn fs_main(in: VsOut) -> @location(0) vec4<f32> {
     if (k == K_SPHERE) {
         c = sphere_color(base, pa, r, in.style.y);
     } else {
-        let t = (v + 1.0) * 0.5;
+        // 0 — теневая сторона, 1 — самое освещённое место (было (v+1)/2 с разворотом нормали).
+        // lit ∈ [-0.8, 1]; степень держит середину трубки в основном тоне (t ≈ 0,6), как в эскизе,
+        // а самое освещённое место — на стопе блика (0,9).
+        let t = 0.9 * pow(clamp((lit + 0.8) / 1.8, 0.0, 1.0), 1.6);
         if (k == K_METAL) {
             c = metal_color(base, t);
         } else {
             c = tube_color(base, t);
             if (k == K_BRAID && in.style.y > 0.0) {
-                c = braid_color(base, c, u, v, du, dv, in.style.y * g.px_per_pt);
+                c = braid_color(base, c, u, v * side, du, dv, in.style.y * g.px_per_pt);
             }
             c = tube_spec(base, c, t);
         }

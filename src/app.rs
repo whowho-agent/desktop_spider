@@ -284,7 +284,7 @@ impl State {
 
         self.list.clear();
         // Плеть видна, пока зажат хоткей; эффекты (вспышки, следы) догорают и без него.
-        self.world.draw(&mut self.list, &self.preset, cursor, self.input.held, self.debug);
+        self.world.draw(&mut self.list, &self.preset, cursor, self.input.held, self.debug, self.acc / STEP);
         self.renderer.render(&self.list);
     }
 

@@ -81,7 +81,7 @@ pub fn run(args: &[String]) -> Result<(), String> {
             t += STEP;
         }
         list.clear();
-        world.draw(&mut list, &preset, cursor, input.held, false);
+        world.draw(&mut list, &preset, cursor, input.held, false, 1.0);
         if !input.held {
             draw_arrow(&mut list, cursor);
         }

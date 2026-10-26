@@ -90,11 +90,12 @@ fn draw_shadow(list: &mut DrawList, pts: &[Vec2], f: &Frame, off: Vec2) {
     let s = f.s;
     let col = [0.0, 0.0, 0.0, 0.3];
     let soft = 2.6 * s;
-    let n = pts.len();
-    // Хлыст — по всем звеньям: тени рисуются со смешиванием «максимум», стыки не темнеют.
-    for i in 0..n.saturating_sub(1) {
-        let w = (2.0 * half_w((i as f32 + 0.5) / (n - 1) as f32) + 1.5) * s;
-        list.soft(pts[i] + off, pts[i + 1] + off, w, col, soft);
+    // Хлыст — по сглаженной кривой: тени рисуются со смешиванием «максимум», стыки не темнеют.
+    let sm = smooth_curve(pts);
+    let m = sm.len();
+    for j in 0..m.saturating_sub(1) {
+        let w = (2.0 * half_w((j as f32 + 0.5) / (m - 1) as f32) + 1.5) * s;
+        list.soft(sm[j] + off, sm[j + 1] + off, w, col, soft);
     }
     list.soft(f.at(-9.0, 0.0) + off, f.at(TIP_X, 0.0) + off, 8.5 * s, [0.0, 0.0, 0.0, 0.32], soft);
     let lp = loop_points();
@@ -111,25 +112,31 @@ pub fn draw_lash(list: &mut DrawList, pts: &[Vec2], pal: &LeatherPalette, k: f32
     if n < 2 {
         return;
     }
-    let fi = (FALL_START * (n - 1) as f32).round() as usize;
-    let link_w = |i: usize| 2.0 * half_w((i as f32 + 0.5) / (n - 1) as f32) * k;
+    // Плавная кривая через точки физики: без углов на стыках звеньев при быстром ударе.
+    let sm = smooth_curve(pts);
+    let m = sm.len();
+    let w_at = |j: usize| 2.0 * half_w((j as f32 + 0.5) / (m - 1) as f32) * k;
+    let fall_from = (FALL_START * (m - 1) as f32).round() as usize;
 
     if let Some(rim) = pal.rim {
-        for i in 0..n - 1 {
-            list.segment(pts[i], pts[i + 1], link_w(i) + 0.9 * k, rim);
+        for j in 0..m - 1 {
+            list.segment(sm[j], sm[j + 1], w_at(j) + 0.9 * k, rim);
         }
     }
-    for i in 0..n - 1 {
-        let w = link_w(i);
-        if i < fi {
-            // Шаг узора = две пряди по 0,6 полуширины, как в эскизе.
-            list.braid(pts[i], pts[i + 1], w, pal.leather, 0.6 * w);
+    // Узор сквозной: фаза в периодах прядей копится вдоль хлыста.
+    let mut phase = 0.0;
+    for j in 0..m - 1 {
+        let w = w_at(j);
+        if j < fall_from {
+            let period = 0.6 * w;
+            list.braid_phase(sm[j], sm[j + 1], w, pal.leather, period, phase);
+            phase += sm[j].distance(sm[j + 1]) / period.max(1e-3);
         } else {
-            list.tube(pts[i], pts[i + 1], w, pal.fall);
+            list.tube(sm[j], sm[j + 1], w, pal.fall);
         }
     }
     // Узел в начале фола.
-    let kp = pts[fi.min(n - 1)];
+    let kp = sm[fall_from.min(m - 1)];
     list.leather_sphere(kp, half_w(FALL_START - 0.01) * 1.7 * k, pal.leather);
     // Хлопушка: 7 нитей веером.
     let tip = pts[n - 1];
@@ -210,6 +217,35 @@ pub fn draw_charge(list: &mut DrawList, center: Vec2, charge: f32, scale: f32) {
         let p1 = center + Vec2::from_angle(a + half) * r;
         list.segment(p0, p1, w, col);
     }
+}
+
+/// Отрезков сглаженной кривой на одно звено физики.
+const SUB: usize = 4;
+
+/// Catmull–Rom через точки хлыста: (n−1)·SUB + 1 точек, проходит через все исходные.
+pub fn smooth_curve(pts: &[Vec2]) -> Vec<Vec2> {
+    let n = pts.len();
+    if n < 3 {
+        return pts.to_vec();
+    }
+    let mut out = Vec::with_capacity((n - 1) * SUB + 1);
+    for i in 0..n - 1 {
+        let p0 = pts[i.saturating_sub(1)];
+        let (p1, p2) = (pts[i], pts[i + 1]);
+        let p3 = pts[(i + 2).min(n - 1)];
+        for s in 0..SUB {
+            let t = s as f32 / SUB as f32;
+            let (t2, t3) = (t * t, t * t * t);
+            out.push(
+                0.5 * (2.0 * p1
+                    + (p2 - p0) * t
+                    + (2.0 * p0 - 5.0 * p1 + 4.0 * p2 - p3) * t2
+                    + (3.0 * p1 - p0 - 3.0 * p2 + p3) * t3),
+            );
+        }
+    }
+    out.push(pts[n - 1]);
+    out
 }
 
 fn lerp(a: f32, b: f32, t: f32) -> f32 {
@@ -435,7 +471,8 @@ mod tests {
             for scale in [0.7, 1.0, 2.0] {
                 for (angle, bend, charge) in [(0.0, 0.0, 0.0), (-0.9, 2.0, 0.5), (2.5, -3.0, 1.0)] {
                     let list = whip(tone, Vec2::new(300.0, 200.0), angle, bend, charge, scale, light_left());
-                    assert!(list.shapes.len() > 60 && list.shapes.len() < 400, "{}", list.shapes.len());
+                    // Сглаженный хлыст: ~100 отрезков на тень, кромку и кожу.
+                    assert!(list.shapes.len() > 60 && list.shapes.len() < 600, "{}", list.shapes.len());
                     assert!(all_finite(&list));
                 }
                 // Вырожденный хлыст: все точки совпали — без NaN.
