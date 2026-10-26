@@ -45,7 +45,7 @@ Rust + wgpu, прозрачное окно поверх всего, клики �
 
 - **macOS (Apple Silicon, 13+)** — `DesktopSpider-macos-arm64.zip`, перенесите `DesktopSpider.app` в «Программы». Сборка без подписи разработчика: при первом запуске правый клик → «Открыть», или
   `/usr/bin/xattr -dr com.apple.quarantine /Applications/DesktopSpider.app`.
-- **Windows 10/11 (x64)** — `DesktopSpider-windows-x64.zip`, распакуйте и запустите `desktop_spider.exe` (из архива не запускайте — рядом должна лежать папка `presets`). SmartScreen может предупредить о неизвестном издателе: «Подробнее» → «Выполнить в любом случае».
+- **Windows 10/11 (x64)** — `DesktopSpider-windows-x64.exe`: один файл, просто запустите. SmartScreen может предупредить о неизвестном издателе: «Подробнее» → «Выполнить в любом случае».
 
 Системные разрешения не нужны.
 
@@ -61,7 +61,9 @@ whip_hotkey = "ctrl+alt"   # модификаторы ctrl/alt/shift/cmd (+ кл
 preset = "spider"
 ```
 
-**Пресеты паука** — `presets/*.toml` (в `.app` — `Contents/Resources/presets`): цвета, длины ног, число пар, стиль (`straight` / `curve` / `dotted`), скорость, походка. Правки подхватываются на лету. В комплекте: `spider`, `blue3`, `tentacle`, `harvestman`, `octopus`. Эталон со всеми полями и комментариями — [`presets/spider.toml`](presets/spider.toml).
+**Пресеты паука** — цвета, длины ног, число пар, стиль (`straight` / `curve` / `dotted`), скорость, походка. Встроены в программу: `spider`, `blue3`, `tentacle`, `harvestman`, `octopus` — файлы для работы не нужны.
+
+Свои пресеты — `*.toml` в папке `presets` рядом с `config.toml` (программа создаёт её при запуске): новые появляются в меню «Пресет», файл с именем встроенного (например `spider.toml`) заменяет его. Правки подхватываются на лету. Эталон со всеми полями и комментариями — [`presets/spider.toml`](presets/spider.toml); в файле достаточно указать только то, что отличается.
 
 ## Сборка из исходников
 
@@ -69,7 +71,7 @@ preset = "spider"
 cargo run --release
 ```
 
-Переменные окружения: `SPIDER_PRESET=tentacle` — стартовый пресет, `SPIDER_DEBUG=1` — отладочная отрисовка, `SPIDER_INPUT_DEBUG=1` — лог хоткея и захвата мыши.
+Переменные окружения: `SPIDER_PRESET=tentacle` — стартовый пресет, `SPIDER_PRESETS=<папка>` — другая папка пользовательских пресетов, `SPIDER_DEBUG=1` — отладочная отрисовка, `SPIDER_INPUT_DEBUG=1` — лог хоткея и захвата мыши.
 
 `.app` для macOS: `scripts/bundle.sh`. Гифки для этого README: `scripts/gifs.sh` — приложение само рендерит сцены без окна (`--record`), ffmpeg собирает GIF.
 

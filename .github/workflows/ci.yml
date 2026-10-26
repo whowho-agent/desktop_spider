@@ -31,7 +31,5 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: desktop_spider-windows-x64
-          path: |
-            target/release/desktop_spider.exe
-            presets/
+          path: target/release/desktop_spider.exe
           if-no-files-found: error

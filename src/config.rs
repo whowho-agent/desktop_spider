@@ -1,12 +1,14 @@
 //! Параметры существа и пресеты.
 //!
-//! Контракт загрузки (реализует агент конфига; сейчас заглушки):
-//! - `presets_dir()`: папка с `*.toml` (по умолчанию `./presets`, рядом с бинарником в `.app`);
-//! - `list_presets()`: имена пресетов (имя файла без `.toml`), отсортированы;
-//! - `load_preset(name)`: парсит файл; отсутствующие поля берутся из `Preset::default()`;
-//! - `PresetWatcher::poll()`: `true`, если с прошлого вызова какой-то `*.toml` изменился.
+//! Встроенные пресеты вшиты в бинарник (`presets/*.toml` на этапе сборки) — для работы по
+//! умолчанию файлы не нужны. Пользовательские лежат в `presets_dir()`: новые имена добавляются
+//! в меню, файл с именем встроенного пресета заменяет его.
+//! - `list_presets()`: встроенные ∪ пользовательские, отсортированы;
+//! - `load_preset(name)`: файл пользователя, иначе встроенный; отсутствующие поля — из `Preset::default()`;
+//! - `PresetWatcher::poll()`: `true`, если с прошлого вызова какой-то `*.toml` в папке изменился.
 //!
-//! Папка ищется так: `$SPIDER_PRESETS` → `<exe>/../Resources/presets` (внутри `.app`) → `./presets`.
+//! Папка: `$SPIDER_PRESETS`, иначе `presets/` рядом с `config.toml`
+//! (macOS `~/Library/Application Support/DesktopSpider/presets`, Windows `%APPDATA%\DesktopSpider\presets`).
 //! Цвета в TOML — строки `"#rrggbb"` или `"#rrggbbaa"`. Неизвестные ключи — ошибка (ловим опечатки).
 
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
@@ -181,40 +183,43 @@ mod color {
     }
 }
 
+/// Встроенные пресеты: имя → TOML, вшиты при сборке.
+const BUILTIN: &[(&str, &str)] = &[
+    ("blue3", include_str!("../presets/blue3.toml")),
+    ("harvestman", include_str!("../presets/harvestman.toml")),
+    ("octopus", include_str!("../presets/octopus.toml")),
+    ("spider", include_str!("../presets/spider.toml")),
+    ("tentacle", include_str!("../presets/tentacle.toml")),
+];
+
+/// Папка пользовательских пресетов (может не существовать).
 pub fn presets_dir() -> PathBuf {
     if let Some(dir) = std::env::var_os("SPIDER_PRESETS") {
         return PathBuf::from(dir);
     }
-    if let Some(exe_dir) = std::env::current_exe().ok().and_then(|e| e.parent().map(Path::to_path_buf)) {
-        // Внутри .app: Contents/MacOS/<exe> → Contents/Resources/presets.
-        let bundled = exe_dir.join("../Resources/presets");
-        if bundled.is_dir() {
-            return bundled;
-        }
-        // Распакованный архив (Windows): presets/ рядом с exe, cwd может быть любым.
-        let beside = exe_dir.join("presets");
-        if beside.is_dir() {
-            return beside;
-        }
-    }
-    PathBuf::from("presets")
+    crate::settings::config_path()
+        .and_then(|p| p.parent().map(|d| d.join("presets")))
+        .unwrap_or_else(|| PathBuf::from("presets"))
 }
 
 pub fn list_presets() -> Vec<String> {
     list_presets_in(&presets_dir())
 }
 
+/// Встроенные плюс файлы из папки (без повторов), по алфавиту.
 fn list_presets_in(dir: &Path) -> Vec<String> {
-    let Ok(entries) = std::fs::read_dir(dir) else {
-        return vec!["spider".into()];
-    };
-    let mut names: Vec<String> = entries
-        .filter_map(|e| e.ok())
-        .map(|e| e.path())
-        .filter(|p| is_toml(p) && p.is_file())
-        .filter_map(|p| p.file_stem()?.to_str().map(str::to_owned))
-        .collect();
+    let mut names: Vec<String> = BUILTIN.iter().map(|(n, _)| n.to_string()).collect();
+    if let Ok(entries) = std::fs::read_dir(dir) {
+        names.extend(
+            entries
+                .filter_map(|e| e.ok())
+                .map(|e| e.path())
+                .filter(|p| is_toml(p) && p.is_file())
+                .filter_map(|p| p.file_stem()?.to_str().map(str::to_owned)),
+        );
+    }
     names.sort();
+    names.dedup();
     names
 }
 
@@ -226,11 +231,18 @@ pub fn load_preset(name: &str) -> Result<Preset, String> {
     load_preset_in(&presets_dir(), name)
 }
 
+/// Файл пользователя важнее встроенного пресета с тем же именем.
 fn load_preset_in(dir: &Path, name: &str) -> Result<Preset, String> {
     let path = dir.join(format!("{name}.toml"));
-    let text = std::fs::read_to_string(&path)
-        .map_err(|e| format!("пресет {}: не удалось прочитать: {e}", path.display()))?;
-    let mut preset = parse_preset(&text).map_err(|e| format!("пресет {}: {e}", path.display()))?;
+    let mut preset = if path.is_file() {
+        let text = std::fs::read_to_string(&path)
+            .map_err(|e| format!("пресет {}: не удалось прочитать: {e}", path.display()))?;
+        parse_preset(&text).map_err(|e| format!("пресет {}: {e}", path.display()))?
+    } else if let Some((_, text)) = BUILTIN.iter().find(|(n, _)| *n == name) {
+        parse_preset(text).map_err(|e| format!("встроенный пресет {name}: {e}"))?
+    } else {
+        return Err(format!("пресет «{name}» не найден: нет встроенного и нет файла {}", path.display()));
+    };
     preset.name = name.to_owned();
     Ok(preset)
 }
@@ -279,8 +291,13 @@ pub struct PresetWatcher {
 }
 
 impl PresetWatcher {
+    /// Папку создаём заранее: так за ней можно следить, и пользователю видно, куда класть свои пресеты.
     pub fn new() -> Self {
-        Self::watch(&presets_dir())
+        let dir = presets_dir();
+        if let Err(e) = std::fs::create_dir_all(&dir) {
+            eprintln!("пресеты: не удалось создать {}: {e}", dir.display());
+        }
+        Self::watch(&dir)
     }
 
     fn watch(dir: &Path) -> Self {
@@ -325,27 +342,48 @@ impl Default for PresetWatcher {
 mod tests {
     use super::*;
 
-    fn repo_presets() -> PathBuf {
-        Path::new(env!("CARGO_MANIFEST_DIR")).join("presets")
+    /// Пустая временная папка для пользовательских пресетов.
+    fn temp_dir(tag: &str) -> PathBuf {
+        let d = std::env::temp_dir().join(format!("spider_presets_{tag}_{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&d);
+        std::fs::create_dir_all(&d).unwrap();
+        d
     }
 
     #[test]
-    fn all_repo_presets_load() {
-        let dir = repo_presets();
-        let names = list_presets_in(&dir);
-        assert!(names.len() >= 5, "{names:?}");
+    fn builtins_load_without_files() {
+        let dir = Path::new("/nonexistent/spider/presets");
+        let names = list_presets_in(dir);
+        assert_eq!(names, ["blue3", "harvestman", "octopus", "spider", "tentacle"]);
         for n in &names {
-            let p = load_preset_in(&dir, n).unwrap_or_else(|e| panic!("{e}"));
+            let p = load_preset_in(dir, n).unwrap_or_else(|e| panic!("{e}"));
             assert_eq!(&p.name, n);
         }
     }
 
     #[test]
-    fn spider_toml_equals_defaults() {
-        let p = load_preset_in(&repo_presets(), "spider").unwrap();
+    fn spider_builtin_equals_defaults() {
+        let p = load_preset_in(Path::new("/nonexistent"), "spider").unwrap();
         let d = Preset::default();
         // Сравниваем через TOML, чтобы не требовать PartialEq от структур.
         assert_eq!(toml::to_string(&p).unwrap(), toml::to_string(&d).unwrap());
+    }
+
+    #[test]
+    fn user_files_add_and_override() {
+        let dir = temp_dir("override");
+        std::fs::write(dir.join("spider.toml"), "color_leg = \"#ff0000\"\n").unwrap();
+        std::fs::write(dir.join("mine.toml"), "[legs]\nstyle = \"dotted\"\n").unwrap();
+        let names = list_presets_in(&dir);
+        assert!(names.contains(&"mine".to_string()) && names.iter().filter(|n| *n == "spider").count() == 1, "{names:?}");
+        assert_eq!(load_preset_in(&dir, "spider").unwrap().color_leg, [1.0, 0.0, 0.0, 1.0]);
+        assert_eq!(load_preset_in(&dir, "mine").unwrap().legs.style, LegStyle::Dotted);
+        // Встроенный без файла — как был.
+        assert_eq!(load_preset_in(&dir, "octopus").unwrap().legs.style, LegStyle::Dotted);
+        // Битый пользовательский файл — ошибка с путём, встроенный не подменяет молча.
+        std::fs::write(dir.join("tentacle.toml"), "[legs]\nsegments = [1.0]\n").unwrap();
+        assert!(load_preset_in(&dir, "tentacle").unwrap_err().contains("tentacle.toml"));
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]
@@ -372,12 +410,7 @@ mod tests {
         assert!(parse_preset("[legs]\nsegments = [10.0]").is_err());
         assert!(parse_preset("[legs]\nspread_deg = [10.0]").is_err());
         assert!(parse_preset("[legs]\nsegments = [10.0, 0.0]").is_err());
-        assert!(load_preset_in(&repo_presets(), "no_such_preset").unwrap_err().contains("no_such_preset.toml"));
-    }
-
-    #[test]
-    fn missing_dir_lists_default() {
-        assert_eq!(list_presets_in(Path::new("/nonexistent/spider/presets")), vec!["spider".to_string()]);
+        assert!(load_preset_in(Path::new("/nonexistent"), "no_such_preset").unwrap_err().contains("no_such_preset"));
     }
 
     #[test]

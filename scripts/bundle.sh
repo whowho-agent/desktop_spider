@@ -5,7 +5,7 @@
 #   scripts/bundle.sh            # release-сборка + .app + ad-hoc подпись
 #   open target/DesktopSpider.app
 #
-# Пресеты копируются в Contents/Resources/presets (config.rs ищет <exe>/../Resources/presets).
+# Пресеты вшиты в бинарник; свои пользователь кладёт в ~/Library/Application Support/DesktopSpider/presets.
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
@@ -19,12 +19,6 @@ cargo build --release
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp "target/release/$BIN" "$APP/Contents/MacOS/$BIN"
-
-if [ -d presets ]; then
-    cp -R presets "$APP/Contents/Resources/presets"
-else
-    echo "warning: ./presets не найдена, бандл без пресетов" >&2
-fi
 
 cat > "$APP/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
