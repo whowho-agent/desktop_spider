@@ -75,7 +75,9 @@ impl ApplicationHandler<UserEvent> for App {
         let mut renderer = Renderer::new(window.clone());
         renderer.resize(window.inner_size(), window.scale_factor());
 
-        let settings = Settings::load();
+        let mut settings = Settings::load();
+        // При запуске всегда «Просто плеть»; режим можно сменить в меню на время работы.
+        settings.mode = Mode::Whip;
         let mut name = std::env::var("SPIDER_PRESET")
             .ok()
             .or_else(|| Some(settings.preset.clone()).filter(|p| !p.is_empty()))

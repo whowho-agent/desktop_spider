@@ -1,0 +1,1034 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Плеть v2</title>
+<style>
+  :root {
+    --bg: #0b0b12;
+    --panel: #14141f;
+    --line: #26263a;
+    --text: #e8e8f0;
+    --muted: #9a9ab0;
+    --accent: #ffd36b;
+    --leather: #d89a5a;
+    --leather-dark: #2a1a10;
+    --lash: #c98a4c;
+    --braid: #f3cf9a;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font: 14px/1.5 -apple-system, "Segoe UI", system-ui, sans-serif;
+  }
+  main { max-width: 1100px; margin: 0 auto; padding: 24px 16px 48px; }
+  h1 { font-size: 22px; margin: 0 0 4px; }
+  h2 { font-size: 15px; margin: 0 0 10px; color: var(--accent); font-weight: 600; }
+  p.lead { color: var(--muted); margin: 0 0 20px; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 16px; margin-bottom: 16px; }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  @media (max-width: 820px) { .grid { grid-template-columns: 1fr; } }
+  svg { display: block; width: 100%; height: auto; }
+  #stage { background:
+      linear-gradient(var(--line) 1px, transparent 1px) 0 0 / 40px 40px,
+      linear-gradient(90deg, var(--line) 1px, transparent 1px) 0 0 / 40px 40px,
+      #07070c;
+    border-radius: 8px; touch-action: none; user-select: none; }
+  #stage.whip { cursor: none; }
+  select { background: #22223a; color: var(--text); border: 1px solid #3a3a5a; border-radius: 6px; padding: 3px 6px; font: inherit; }
+  .controls { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; margin: 10px 0 0; color: var(--muted); }
+  button { background: #22223a; color: var(--text); border: 1px solid #3a3a5a; border-radius: 8px; padding: 6px 12px; font: inherit; cursor: pointer; }
+  button:hover { background: #2c2c4a; }
+  kbd { background: #22223a; border: 1px solid #3a3a5a; border-bottom-width: 2px; border-radius: 5px; padding: 0 6px; font: 12px ui-monospace, monospace; color: var(--text); }
+  .status { margin-left: auto; font: 12px ui-monospace, monospace; color: var(--accent); }
+  table { border-collapse: collapse; width: 100%; }
+  td, th { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { color: var(--muted); font-weight: 500; }
+  ul { margin: 6px 0 0; padding-left: 18px; }
+  li { margin: 3px 0; }
+  .muted { color: var(--muted); }
+</style>
+</head>
+<body>
+<main>
+  <h1>Плеть v2 — на согласование</h1>
+  <p class="lead">Объёмная кожа с глянцем, натуральные цвета, новые детали. Физика и анимация — те же, что уже в приложении. Внизу песочница: зажмите <kbd>⌥ Option</kbd> / <kbd>Alt</kbd> над полем или нажмите «Показать удар».</p>
+
+  <section class="card">
+    <h2>Вид</h2>
+    <div class="controls" style="margin:0">
+      <label>Кожа <select id="tone">
+        <option value="natural">натуральная</option>
+        <option value="cognac">коньячная</option>
+        <option value="chocolate">шоколадная</option>
+        <option value="burgundy">бордовая</option>
+        <option value="black">чёрная</option>
+        <option value="custom">свой цвет…</option>
+      </select></label>
+      <input type="color" id="toneColor" value="#7a4a26" title="Свой цвет кожи">
+      <label>Свет <select id="light">
+        <option value="left">сверху слева</option>
+        <option value="right">сверху справа</option>
+      </select></label>
+      <label>Блик <input type="range" id="gloss" min="0" max="1" step="0.05" value="0.5"> <span id="glossVal">средний</span></label>
+    </div>
+    <p class="muted" style="margin:8px 0 0">В приложении это три настройки в меню «Плеть» и в <code>config.toml</code>: <code>whip_leather</code> (тон или #цвет), <code>whip_light</code> (left / right), <code>whip_gloss</code> (0–1).</p>
+  </section>
+
+  <section class="card">
+    <h2>Модель v2</h2>
+    <svg id="model" viewBox="0 0 760 560" aria-label="Плеть v2: светлая и чёрная, с подписями деталей; v1 для сравнения"></svg>
+  </section>
+
+  <section class="card">
+    <h2>Детали</h2>
+    <svg id="details" viewBox="0 0 760 350" aria-label="Крупные планы деталей плети"></svg>
+  </section>
+
+  <section class="card">
+    <h2>Песочница</h2>
+    <svg id="stage" viewBox="0 0 1000 520" aria-label="Интерактивная плеть и паук-мишень"></svg>
+    <div class="controls">
+      <span><kbd>⌥</kbd> держать — плеть</span>
+      <span><kbd>ЛКМ</kbd> — удар</span>
+      <span><kbd>ПКМ</kbd> держать — раскрутка, отпустить — захлёст</span>
+      <label><input type="checkbox" id="lock"> плеть без клавиши</label>
+      <label>Режим <select id="mode"><option value="game">игра: попади по пауку</option><option value="plain">просто плеть</option></select></label>
+      <button id="demoStrike">Показать удар</button>
+      <button id="demoSpin">Показать раскрутку</button>
+      <span class="status"><span id="score"></span> · <span id="status">курсор</span></span>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>Раскадровка</h2>
+    <svg id="film" viewBox="0 0 1120 470" aria-label="Ключевые кадры удара и захлёста"></svg>
+    <p class="muted">Кадры посчитаны той же физикой, что в песочнице. Крестик — точка курсора, звезда — где щёлкнул кончик.</p>
+  </section>
+
+  <div class="grid">
+    <section class="card">
+      <h2>Что нового</h2>
+      <ul>
+        <li><b>Объём и глянец:</b> хлыст и рукоять затенены как цилиндр, блик со стороны света (свет сверху слева, как в macOS), блик остаётся на месте, когда плеть вращается.</li>
+        <li><b>Кожа:</b> натуральная коричневая (светлая) и чёрная с холодным бликом; плетение прядями двух тонов, ромбовая оплётка рукояти.</li>
+        <li><b>Новые детали:</b> темляк, металлическое навершие, кольцо, турецкий узел, кожаный переход, металлическое кольцо у хлыста, узел фола, гладкий фол, распушённая хлопушка.</li>
+        <li><b>Мягкая тень</b> под плетью на «рабочем столе».</li>
+        <li><b>Щелчок:</b> к вспышке добавлены искры и облачко пыли.</li>
+      </ul>
+    </section>
+    <section class="card">
+      <h2>Как это ляжет в приложение</h2>
+      <ul>
+        <li>Без текстур: в шейдер добавляется «трубка» — отрезок с цилиндрическим затенением, бликом и узором плетения, плюс металлическая сфера для навершия. Это несколько строк SDF-кода, рендер остаётся одним вызовом.</li>
+        <li>Тень — те же фигуры, только шире, полупрозрачные и с мягким краем.</li>
+        <li>Фигур на плеть станет примерно втрое больше (≈ 300 вместо ≈ 100) — для видеокарты это всё ещё ничто.</li>
+        <li>Размер плети, цвета и физика не меняются; v1 можно оставить как вариант «плоская».</li>
+      </ul>
+    </section>
+  </div>
+</main></main>
+
+<script>
+(() => {
+  const NS = 'http://www.w3.org/2000/svg';
+  const el = (tag, attrs = {}, parent) => {
+    const e = document.createElementNS(NS, tag);
+    for (const k in attrs) e.setAttribute(k, attrs[k]);
+    if (parent) parent.appendChild(e);
+    return e;
+  };
+  const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+  const C = { accent: css('--accent') };
+  const lerp = (a, b, t) => a + (b - a) * t;
+  const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+  const angDiff = (a, b) => Math.atan2(Math.sin(b - a), Math.cos(b - a));
+  const easeOut = t => 1 - Math.pow(1 - t, 3);
+  const easeIn = t => t * t * t;
+  // Варианты плети. Чёрной нужна светлая кромка, иначе на тёмном рабочем столе её не видно.
+  // ---------- свет и материалы ----------
+  // Свет сверху слева (как в macOS); блик всегда смотрит на него, как бы ни повернулась плеть.
+  // Источник света — сверху слева или справа; тень падает в противоположную сторону.
+  let LIGHT, SHADOW_OFF;
+  function setLight(side) {
+    const sx = side === 'right' ? 1 : -1, x = 0.45 * sx, y = -0.89, l = Math.hypot(x, y);
+    LIGHT = { x: x / l, y: y / l };
+    SHADOW_OFF = { x: -5 * sx, y: 8 };
+  }
+  setLight('left');
+  // Сила блика 0..1 (0,5 — средний).
+  let GLOSS = 0.5;
+  let uidN = 0;
+  const uid = p => `${p}${++uidN}`;
+  function defsOf(node) {
+    const root = node.ownerSVGElement || node;
+    let d = root.querySelector(':scope > defs');
+    if (!d) { d = document.createElementNS(NS, 'defs'); root.insertBefore(d, root.firstChild); }
+    return d;
+  }
+  function linGrad(node, stops) {
+    const g = el('linearGradient', { id: uid('lg'), gradientUnits: 'userSpaceOnUse' }, defsOf(node));
+    for (const [o, c, a] of stops) el('stop', { offset: o, 'stop-color': c, 'stop-opacity': a ?? 1 }, g);
+    return g;
+  }
+  function radGrad(node, stops) {
+    const g = el('radialGradient', { id: uid('rg'), cx: 0.5, cy: 0.5, r: 0.62, fx: 0.4, fy: 0.3 }, defsOf(node));
+    for (const [o, c, a] of stops) el('stop', { offset: o, 'stop-color': c, 'stop-opacity': a ?? 1 }, g);
+    return g;
+  }
+  function shadowFilter(node) {
+    const root = node.ownerSVGElement || node;
+    if (!root.__shadow) {
+      const f = el('filter', { id: uid('sh'), x: '-50%', y: '-50%', width: '200%', height: '200%' }, defsOf(node));
+      el('feGaussianBlur', { stdDeviation: 2.6 }, f);
+      root.__shadow = `url(#${f.id})`;
+    }
+    return root.__shadow;
+  }
+  const url = g => `url(#${g.id})`;
+
+  // Палитры v2: кожа (тень → основа → середина → свет → блик), пряди, фол, хлопушка, металл.
+  const SKINS = {
+    light: { dark: '#3a210e', base: '#77461f', mid: '#9a6131', light: '#c98d55', spec: '#ffedd0',
+             strandD: '#46280f', strandL: '#dda56c', fall: '#a06b3a', fallL: '#d8a670', cracker: '#f3ece0',
+             metD: '#5a4214', met: '#a9853b', metL: '#f0d58c', metS: '#fffbe8', rim: null },
+    black: { dark: '#040406', base: '#121217', mid: '#1f1f27', light: '#3a3a48', spec: '#d9e0ff',
+             strandD: '#000000', strandL: '#4c4c60', fall: '#1b1b22', fallL: '#3c3c4a', cracker: '#ecebf2',
+             metD: '#1b1e24', met: '#565c67', metL: '#c3c9d4', metS: '#ffffff', rim: '#727286' },
+  };
+  // Палитра из любого цвета кожи: оттенки по светлоте в HSL; металл — латунь у светлых, воронёный у тёмных.
+  function hexToHsl(hex) {
+    const n = parseInt(hex.slice(1), 16), r = (n >> 16 & 255) / 255, g = (n >> 8 & 255) / 255, b = (n & 255) / 255;
+    const mx = Math.max(r, g, b), mn = Math.min(r, g, b), l = (mx + mn) / 2, d = mx - mn;
+    if (!d) return [0, 0, l];
+    const s = d / (1 - Math.abs(2 * l - 1));
+    const h = mx === r ? ((g - b) / d + 6) % 6 : mx === g ? (b - r) / d + 2 : (r - g) / d + 4;
+    return [h * 60, s, l];
+  }
+  function hsl(h, s, l) {
+    l = clamp(l, 0, 1); s = clamp(s, 0, 1);
+    const c = (1 - Math.abs(2 * l - 1)) * s, x = c * (1 - Math.abs((h / 60) % 2 - 1)), m = l - c / 2;
+    const [r, g, b] = h < 60 ? [c, x, 0] : h < 120 ? [x, c, 0] : h < 180 ? [0, c, x] : h < 240 ? [0, x, c] : h < 300 ? [x, 0, c] : [c, 0, x];
+    return '#' + [r, g, b].map(v => Math.round((v + m) * 255).toString(16).padStart(2, '0')).join('');
+  }
+  function makeLeather(hex) {
+    const [h, s, l] = hexToHsl(hex);
+    const dark = l < 0.16;
+    const L = k => hsl(h, s, l * k), Lmin = (k, min) => hsl(h, s, Math.max(min, l * k));
+    const metalSet = dark
+      ? { metD: '#1b1e24', met: '#565c67', metL: '#c3c9d4', metS: '#ffffff', rim: hsl(h, s * 0.4, 0.45) }
+      : { metD: '#5a4214', met: '#a9853b', metL: '#f0d58c', metS: '#fffbe8', rim: null };
+    return { dark: L(0.42), base: hex, mid: L(1.25), light: Lmin(1.7, 0.3), spec: hsl(h, s * 0.5, 0.93),
+             strandD: L(0.55), strandL: Lmin(1.9, 0.32), fall: L(1.3), fallL: Lmin(1.8, 0.32), cracker: '#f3ece0', ...metalSet };
+  }
+  const TONES = {
+    natural: SKINS.light,
+    cognac: makeLeather('#8a4719'),
+    chocolate: makeLeather('#4a2816'),
+    burgundy: makeLeather('#5e1c24'),
+    black: SKINS.black,
+  };
+  let skin = SKINS.light;
+  // Режим песочницы: 'game' — паук-мишень, 'plain' — просто плеть.
+  let mode = 'game';
+  const tube = P => [[0, P.dark], [0.32, P.base], [0.6, P.mid], [0.8, P.light], [0.9, P.spec, Math.min(1, 1.6 * GLOSS)], [1, P.mid]];
+  const tubeFall = P => [[0, P.dark], [0.35, P.fall], [0.75, P.fallL], [0.88, P.spec, Math.min(1, 1.2 * GLOSS)], [1, P.fall]];
+  const metal = P => [[0, P.metD], [0.45, P.met], [0.78, P.metL], [0.9, P.metS, 0.4 + 0.6 * GLOSS], [1, P.met]];
+
+  // ---------- общая геометрия ----------
+  // Рукоять в локальных координатах (вдоль +x), курсор держит её в точке GRIP_X.
+  const GRIP_X = 8, TIP_X = 46;
+  const rot = (v, a) => ({ x: v.x * Math.cos(a) - v.y * Math.sin(a), y: v.x * Math.sin(a) + v.y * Math.cos(a) });
+
+  // Рукоять v2. Возвращает { update(angle) } — блики и тень пересчитываются под угол.
+  function buildHandle(parent, P = skin, angle0 = 0) {
+    const g = el('g', {}, parent);
+    const sh = el('g', { filter: shadowFilter(g), opacity: 0.32 }, g);
+    el('line', { x1: -9, y1: 0, x2: 46, y2: 0, stroke: '#000', 'stroke-width': 8.5, 'stroke-linecap': 'round' }, sh);
+    el('path', { d: 'M-9 0 C-23 -1 -31 14 -21 22 C-13 28 -6 15 -8 4', stroke: '#000', 'stroke-width': 3, fill: 'none' }, sh);
+    // Темляк: кожаная петля на запястье.
+    el('path', { d: 'M-9 0 C-23 -1 -31 14 -21 22 C-13 28 -6 15 -8 4', stroke: P.dark, 'stroke-width': 2.8, fill: 'none', 'stroke-linecap': 'round' }, g);
+    el('path', { d: 'M-9 0 C-23 -1 -31 14 -21 22 C-13 28 -6 15 -8 4', stroke: P.light, 'stroke-width': 0.9, fill: 'none', 'stroke-opacity': 0.55, transform: 'translate(-0.4 -0.5)' }, g);
+    // Навершие: металлическая сфера с бликом.
+    const pomG = radGrad(g, [[0, P.metS], [0.25, P.metL], [0.6, P.met], [1, P.metD]]);
+    el('circle', { cx: -6, cy: 0, r: 5.2, fill: url(pomG), stroke: P.metD, 'stroke-width': 0.4 }, g);
+    const pomSpec = el('circle', { r: 0.6 + 1.2 * GLOSS, fill: P.metS, opacity: 0.35 + 0.65 * GLOSS }, g);
+    // Кольцо у навершия.
+    const colG = linGrad(g, metal(P));
+    el('rect', { x: -1.8, y: -4.5, width: 3, height: 9, rx: 0.9, fill: url(colG) }, g);
+    // Рукоять: кожа + ромбовая оплётка.
+    const gripG = linGrad(g, tube(P));
+    el('rect', { x: 1, y: -3.9, width: 31.5, height: 7.8, rx: 2.4, fill: url(gripG) }, g);
+    if (P.rim) el('rect', { x: 1, y: -3.9, width: 31.5, height: 7.8, rx: 2.4, fill: 'none', stroke: P.rim, 'stroke-width': 0.35 }, g);
+    const clip = el('clipPath', { id: uid('cp') }, defsOf(g));
+    el('rect', { x: 1, y: -3.9, width: 31.5, height: 7.8, rx: 2.4 }, clip);
+    const weave = el('g', { 'clip-path': `url(#${clip.id})` }, g);
+    for (let x = -6; x < 34; x += 3.2) {
+      el('line', { x1: x, y1: -3.9, x2: x + 6, y2: 3.9, stroke: P.strandD, 'stroke-width': 0.6, 'stroke-opacity': 0.6 }, weave);
+      el('line', { x1: x + 6, y1: -3.9, x2: x, y2: 3.9, stroke: P.strandD, 'stroke-width': 0.6, 'stroke-opacity': 0.6 }, weave);
+      el('line', { x1: x + 0.5, y1: -3.9, x2: x + 6.5, y2: 3.9, stroke: P.strandL, 'stroke-width': 0.3, 'stroke-opacity': 0.45 }, weave);
+    }
+    const gripSpec = el('rect', { x: 2.5, width: 28.5, height: 1, rx: 0.5, fill: P.spec, opacity: 0.8 * GLOSS }, g);
+    // Турецкий узел.
+    const knotG = radGrad(g, [[0, P.light], [0.6, P.base], [1, P.dark]]);
+    for (const y of [-2.7, 0, 2.7]) for (const x of [33.6, 35.6]) {
+      el('circle', { cx: x, cy: y + (x > 34 ? 1.3 : 0) * 0, r: 1.65, fill: url(knotG), stroke: P.strandD, 'stroke-width': 0.25 }, g);
+    }
+    // Кожаный переход и кольцо перед хлыстом.
+    const bolG = linGrad(g, tube(P));
+    el('path', { d: 'M36.6 -3.5 C40 -3.3 42 -2.3 44 -1.9 L44 1.9 C42 2.3 40 3.3 36.6 3.5 Z', fill: url(bolG) }, g);
+    const ferG = linGrad(g, metal(P));
+    el('rect', { x: 43.4, y: -2.3, width: 2.8, height: 4.6, rx: 0.6, fill: url(ferG) }, g);
+
+    function update(angle) {
+      const L = rot(LIGHT, -angle);              // свет в локальных координатах рукояти
+      const side = L.y < 0 ? -1 : 1;             // сторона блика по оси y
+      for (const [gr, h] of [[gripG, 3.9], [bolG, 3.5], [colG, 4.5], [ferG, 2.3]]) {
+        gr.setAttribute('x1', 0); gr.setAttribute('x2', 0);
+        gr.setAttribute('y1', -side * h); gr.setAttribute('y2', side * h);
+      }
+      gripSpec.setAttribute('y', side < 0 ? -3.1 : 2.1);
+      pomG.setAttribute('fx', 0.5 + L.x * 0.28); pomG.setAttribute('fy', 0.5 + L.y * 0.28);
+      pomSpec.setAttribute('cx', -6 + L.x * 2.3); pomSpec.setAttribute('cy', L.y * 2.3);
+      const o = rot(SHADOW_OFF, -angle);
+      sh.setAttribute('transform', `translate(${o.x} ${o.y})`);
+    }
+    update(angle0);
+    return { g, update };
+  }
+
+  // Хлыст v2: сегменты-«трубки» с градиентом поперёк, пряди, блик, узел, фол, хлопушка, тень.
+  // `k` — толщина (схема рисует ×2). Возвращает объект для drawLash.
+  function buildLash(parent, P = skin, k = 1) {
+    const g = el('g', {}, parent);
+    const shadow = el('path', { fill: 'none', stroke: '#000', 'stroke-opacity': 0.3, 'stroke-linecap': 'round', 'stroke-linejoin': 'round', filter: shadowFilter(g) }, g);
+    const segG = el('g', {}, g);
+    const knotGr = radGrad(g, [[0, P.light], [0.55, P.base], [1, P.dark]]);
+    const knot = el('circle', { fill: url(knotGr), stroke: P.strandD, 'stroke-width': 0.3 * k }, g);
+    const cracker = el('path', { fill: 'none', stroke: P.cracker, 'stroke-width': 0.6 * k, 'stroke-linecap': 'round', 'stroke-opacity': 0.92 }, g);
+    return { g, P, k, shadow, segG, segs: [], knot, cracker };
+  }
+  function lashSeg(l, P) {
+    const s = { gBraid: linGrad(l.g, tube(P)), gFall: linGrad(l.g, tubeFall(P)) };
+    if (P.rim) s.rim = el('line', { stroke: P.rim, 'stroke-linecap': 'round' }, l.segG);
+    s.body = el('line', { 'stroke-linecap': 'round' }, l.segG);
+    s.strandD = el('path', { stroke: P.strandD, 'stroke-linecap': 'round', fill: 'none', 'stroke-opacity': 0.65 }, l.segG);
+    s.strandL = el('path', { stroke: P.strandL, 'stroke-linecap': 'round', fill: 'none', 'stroke-opacity': P.rim ? 0.3 : 0.5 }, l.segG);
+    s.spec = el('line', { stroke: P.spec, 'stroke-linecap': 'round' }, l.segG);
+    return s;
+  }
+  const FALL_START = 0.82;
+  const halfW = s => s < FALL_START ? lerp(3.4, 1.1, s / FALL_START) : 0.7;
+  function drawLash(l, pts) {
+    const { P, k } = l, n = pts.length;
+    while (l.segs.length < n - 1) l.segs.push(lashSeg(l, P));
+    const fi = Math.round(FALL_START * (n - 1));
+    let sd = '';
+    for (let i = 0; i < n; i++) sd += (i ? 'L' : 'M') + (pts[i].x + SHADOW_OFF.x) + ' ' + (pts[i].y + SHADOW_OFF.y);
+    l.shadow.setAttribute('d', sd); l.shadow.setAttribute('stroke-width', 5.2 * k);
+    for (let i = 0; i < l.segs.length; i++) {
+      const sg = l.segs[i], on = i < n - 1;
+      for (const e of [sg.rim, sg.body, sg.strandD, sg.strandL, sg.spec]) if (e) e.style.display = on ? '' : 'none';
+      if (!on) continue;
+      const a = pts[i], b = pts[i + 1];
+      let tx = b.x - a.x, ty = b.y - a.y; const len = Math.hypot(tx, ty) || 1; tx /= len; ty /= len;
+      let nx = -ty, ny = tx;
+      if (nx * LIGHT.x + ny * LIGHT.y < 0) { nx = -nx; ny = -ny; }
+      const w = halfW((i + 0.5) / (n - 1)) * k, mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
+      const fall = i >= fi, gr = fall ? sg.gFall : sg.gBraid;
+      gr.setAttribute('x1', mx - nx * w); gr.setAttribute('y1', my - ny * w);
+      gr.setAttribute('x2', mx + nx * w); gr.setAttribute('y2', my + ny * w);
+      const line = (e, x1, y1, x2, y2, sw) => { e.setAttribute('x1', x1); e.setAttribute('y1', y1); e.setAttribute('x2', x2); e.setAttribute('y2', y2); e.setAttribute('stroke-width', sw); };
+      if (sg.rim) line(sg.rim, a.x, a.y, b.x, b.y, 2 * w + 0.9 * k);
+      line(sg.body, a.x, a.y, b.x, b.y, 2 * w);
+      sg.body.setAttribute('stroke', url(gr));
+      // Пряди: диагонали поперёк хлыста, направление чередуется — плетёнка. Число прядей
+      // пропорционально длине сегмента, поэтому узор плотный при любом масштабе.
+      if (!fall) {
+        const m = Math.max(1, Math.round(len / (w * 0.6)));
+        let dD = '', dL = '';
+        for (let j = 0; j < m; j++) {
+          const sgn = (i * m + j) % 2 ? 1 : -1, q = (len / m) * 0.62 * sgn;
+          const cx = a.x + tx * len * (j + 0.5) / m, cy = a.y + ty * len * (j + 0.5) / m;
+          dD += `M${cx - tx * q + nx * w * 0.85} ${cy - ty * q + ny * w * 0.85} L${cx + tx * q - nx * w * 0.85} ${cy + ty * q - ny * w * 0.85} `;
+          const o = w * 0.2;
+          dL += `M${cx - tx * q + nx * w * 0.8 + tx * o} ${cy - ty * q + ny * w * 0.8 + ty * o} L${cx + tx * q - nx * w * 0.5 + tx * o} ${cy + ty * q - ny * w * 0.5 + ty * o} `;
+        }
+        sg.strandD.setAttribute('d', dD); sg.strandD.setAttribute('stroke-width', Math.max(0.35 * k, w * 0.3));
+        sg.strandL.setAttribute('d', dL); sg.strandL.setAttribute('stroke-width', Math.max(0.22 * k, w * 0.14));
+      }
+      sg.strandD.style.display = sg.strandL.style.display = fall ? 'none' : '';
+      line(sg.spec, a.x + nx * w * 0.5, a.y + ny * w * 0.5, b.x + nx * w * 0.5, b.y + ny * w * 0.5, Math.max(0.45 * k, w * 0.3));
+      sg.spec.setAttribute('stroke-opacity', (fall ? 0.7 : 1.1) * GLOSS * (1 - 0.5 * i / (n - 1)));
+    }
+    // Узел фола.
+    const kp = pts[fi];
+    l.knot.setAttribute('cx', kp.x); l.knot.setAttribute('cy', kp.y); l.knot.setAttribute('r', halfW(FALL_START - 0.01) * k * 1.7);
+    // Хлопушка: 7 распушённых нитей, чуть колышутся.
+    const tip = pts[n - 1], pre = pts[Math.max(0, n - 3)];
+    let dx = tip.x - pre.x, dy = tip.y - pre.y; const dl = Math.hypot(dx, dy) || 1; dx /= dl; dy /= dl;
+    const t = performance.now() / 1000;
+    let d = '';
+    for (let j = 0; j < 7; j++) {
+      const a = -0.5 + j * (1 / 6), L = (8 + 3 * Math.sin(j * 1.7 + 0.5)) * k;
+      const ex = tip.x + (dx * Math.cos(a) - dy * Math.sin(a)) * L, ey = tip.y + (dx * Math.sin(a) + dy * Math.cos(a)) * L;
+      const wob = Math.sin(t * 9 + j * 1.3) * 1.2 * k;
+      d += `M${tip.x} ${tip.y} Q${tip.x + dx * L * 0.5 - dy * wob} ${tip.y + dy * L * 0.5 + dx * wob} ${ex} ${ey} `;
+    }
+    l.cracker.setAttribute('d', d);
+  }
+
+  // ---------- v1 — для сравнения на схеме ----------
+  const V1 = { handle: '#2a1a10', edge: '#d89a5a', knob: '#d89a5a', braid: '#f3cf9a', lash: '#c98a4c', lashEdge: '#d89a5a', lashBraid: '#f3cf9a', tuft: '#ffffff' };
+  function buildHandleV1(parent, P = V1) {
+    const g = el('g', {}, parent);
+    el('path', { d: `M34 -3.5 L46 -1.6 L46 1.6 L34 3.5 Z`, fill: P.handle, stroke: P.edge, 'stroke-width': 1.2 }, g);
+    el('rect', { x: -2, y: -3.6, width: 36, height: 7.2, rx: 2.5, fill: P.handle, stroke: P.edge, 'stroke-width': 1.3 }, g);
+    for (let x = 1; x < 33; x += 4.5) el('line', { x1: x, y1: -3.4, x2: x + 3, y2: 3.4, stroke: P.braid, 'stroke-width': 0.9, 'stroke-opacity': 0.75 }, g);
+    el('circle', { cx: -6, cy: 0, r: 4.6, fill: P.knob, stroke: P.braid, 'stroke-width': 0.8 }, g);
+    el('circle', { cx: -6, cy: 0, r: 1.6, fill: P.handle }, g);
+  }
+  function drawLashV1(parent, pts, k, P = V1) {
+    const n = pts.length, L = [], R = [];
+    for (let i = 0; i < n; i++) {
+      const a = pts[Math.max(0, i - 1)], b = pts[Math.min(n - 1, i + 1)];
+      let dx = b.x - a.x, dy = b.y - a.y; const len = Math.hypot(dx, dy) || 1; dx /= len; dy /= len;
+      const w = halfW(i / (n - 1)) * k;
+      L.push([pts[i].x - dy * w, pts[i].y + dx * w]); R.push([pts[i].x + dy * w, pts[i].y - dx * w]);
+    }
+    el('path', { d: 'M' + L.map(p => p.join(' ')).join(' L') + ' L' + R.reverse().map(p => p.join(' ')).join(' L') + ' Z', fill: P.lash, stroke: P.lashEdge, 'stroke-width': 0.6 }, parent);
+  }
+
+  // Кривая хлыста для схем: кубическая Безье от кончика рукояти.
+  function modelCurve(S, n = 40, dx = 0) {
+    const P0 = [TIP_X * S + dx, 0], P1 = [TIP_X * S + 160 + dx, -10], P2 = [TIP_X * S + 300 + dx, 110], P3 = [TIP_X * S + 520 + dx, 40];
+    const pts = [];
+    for (let i = 0; i <= n; i++) {
+      const t = i / n, u = 1 - t;
+      pts.push({ x: u*u*u*P0[0] + 3*u*u*t*P1[0] + 3*u*t*t*P2[0] + t*t*t*P3[0], y: u*u*u*P0[1] + 3*u*u*t*P1[1] + 3*u*t*t*P2[1] + t*t*t*P3[1] });
+    }
+    return pts;
+  }
+
+  // ---------- схема модели ----------
+  function drawModel() {
+    const svg = document.getElementById('model');
+    svg.replaceChildren(); svg.__shadow = null;
+    const S = 2.2, ox = 92;
+    el('rect', { x: 500, y: 0, width: 260, height: 420, rx: 8, fill: '#ececf2' }, svg);
+    const t1 = el('text', { x: 630, y: 18, fill: '#55556a', 'font-size': 11, 'text-anchor': 'middle' }, svg);
+    t1.textContent = 'поверх светлого окна';
+    const toneName = { natural: 'Натуральная', cognac: 'Коньячная', chocolate: 'Шоколадная', burgundy: 'Бордовая', black: 'Чёрная', custom: 'Свой цвет' }[document.getElementById('tone').value];
+    const rows = [[toneName, skin, 135, true], ['Чёрная', SKINS.black, 325, false]];
+    for (const [name, P, oy, withLabels] of rows) {
+      const root = el('g', { transform: `translate(${ox} ${oy})` }, svg);
+      const cap = el('text', { x: -82, y: -100, fill: C.accent, 'font-size': 14, 'font-weight': 600 }, root);
+      cap.textContent = name;
+      const pts = modelCurve(S);
+      drawLash(buildLash(root, P, 2), pts);
+      buildHandle(el('g', { transform: `scale(${S})` }, root), P, 0);
+      if (!withLabels) continue;
+      const labels = [
+        [-24 * S, 18 * S, 4, 70, 'Темляк'],
+        [-6 * S, -5 * S, -58, -46, 'Навершие'],
+        [16 * S, -4 * S, 36, -80, 'Ромбовая оплётка, глянец'],
+        [35 * S, -3 * S, 92, -56, 'Турецкий узел'],
+        [45 * S, 2 * S, 128, 74, 'Кольцо'],
+        [pts[12].x, pts[12].y - 7, pts[12].x + 30, -86, 'Плетёный хлыст с бликом'],
+        [pts[33].x, pts[33].y - 5, pts[33].x - 20, -50, 'Узел фола'],
+        [pts[37].x, pts[37].y + 4, pts[37].x - 50, 104, 'Фол'],
+        [pts[40].x + 8, pts[40].y, pts[40].x + 4, 112, 'Хлопушка'],
+      ];
+      for (const [x1, y1, x2, y2, t] of labels) {
+        const onLight = x2 + ox > 500;
+        el('line', { x1, y1, x2, y2: y2 + (y2 < 0 ? 4 : -12), stroke: onLight ? '#9a9ab0' : '#55557a', 'stroke-width': 1 }, root);
+        const tx = el('text', { x: x2, y: y2, fill: onLight ? '#33334a' : '#c8c8dc', 'font-size': 12.5, 'text-anchor': 'middle' }, root);
+        tx.textContent = t;
+      }
+    }
+    // v1 для сравнения.
+    const cmp = el('g', { transform: 'translate(92 480)' }, svg);
+    const c1 = el('text', { x: -82, y: -30, fill: '#77779a', 'font-size': 13, 'font-weight': 600 }, cmp);
+    c1.textContent = 'Было (v1)';
+    drawLashV1(cmp, modelCurve(1.4, 40).map(p => ({ x: p.x * 0.75, y: p.y * 0.45 })), 1.4);
+    buildHandleV1(el('g', { transform: 'scale(1.4)' }, cmp));
+    const dim = el('text', { x: 380, y: 548, fill: '#77779a', 'font-size': 12, 'text-anchor': 'middle' }, svg);
+    dim.textContent = 'размеры прежние: рукоять ≈ 50 pt, хлыст ≈ 190 pt; у тёмной кожи — светлая кромка, чтобы читалась на тёмном рабочем столе';
+  }
+  drawModel();
+
+  // ---------- крупные планы ----------
+  function drawDetails() {
+    const svg = document.getElementById('details');
+    svg.replaceChildren(); svg.__shadow = null;
+    const TW = 246, TH = 150, GAP = 11;
+    const tiles = [
+      ['Темляк и навершие', (g) => { const h = buildHandle(el('g', { transform: 'translate(150 62) scale(4.2)' }, g), skin, -0.25); }],
+      ['Ромбовая оплётка и глянец', (g) => { buildHandle(el('g', { transform: 'translate(-6 75) scale(5.2)' }, g), skin, 0); }],
+      ['Турецкий узел, переход, кольцо', (g) => { buildHandle(el('g', { transform: 'translate(-150 75) scale(6.2)' }, g), skin, 0); }],
+      ['Плетёный хлыст', (g) => { const pts = Array.from({ length: 27 }, (_, i) => ({ x: -20 + i * 48, y: 75 + Math.sin(i * 0.5) * 12 })); drawLash(buildLash(g, skin, 6.5), pts); }],
+      ['Чёрная кожа', (g) => { const pts = Array.from({ length: 27 }, (_, i) => ({ x: -20 + i * 48, y: 75 + Math.sin(i * 0.5) * 12 })); drawLash(buildLash(g, SKINS.black, 6.5), pts); buildHandle(el('g', { transform: 'translate(150 40) scale(3.4)' }, g), SKINS.black, 0.3); }],
+      ['Узел фола, фол, хлопушка', (g) => { const pts = Array.from({ length: 27 }, (_, i) => ({ x: -420 + i * 24, y: 78 - Math.max(0, i - 19) * 5 })); drawLash(buildLash(g, skin, 4.5), pts); }],
+    ];
+    tiles.forEach(([name, draw], i) => {
+      const x = (i % 3) * (TW + GAP), y = Math.floor(i / 3) * (TH + 22);
+      const clip = el('clipPath', { id: uid('tc') }, defsOf(svg));
+      el('rect', { x: 0, y: 0, width: TW, height: TH, rx: 8 }, clip);
+      const tile = el('g', { transform: `translate(${x} ${y})` }, svg);
+      el('rect', { width: TW, height: TH, rx: 8, fill: '#0b0b12', stroke: '#26263a' }, tile);
+      draw(el('g', { 'clip-path': `url(#${clip.id})` }, tile));
+      const tt = el('text', { x: TW / 2, y: TH + 16, fill: '#c8c8dc', 'font-size': 12.5, 'text-anchor': 'middle' }, tile);
+      tt.textContent = name;
+    });
+  }
+  drawDetails();
+
+  // ---------- песочница ----------
+  const svg = document.getElementById('stage');
+  const W = 1000, H = 520;
+  const status = document.getElementById('status');
+  const lockBox = document.getElementById('lock');
+
+  const layerApp = el('g', {}, svg);
+  const layerWelts = el('g', {}, svg);
+  const layerTarget = el('g', {}, svg);
+  const layerFx = el('g', {}, svg);
+  const layerWhip = el('g', {}, svg);
+  const chargeRing = el('circle', { r: 38, fill: 'none', stroke: C.accent, 'stroke-width': 1.2, 'stroke-dasharray': '3 5', opacity: 0 }, layerWhip);
+  const lashG = el('g', {}, layerWhip);
+  const handleG = el('g', {}, layerWhip);
+  let lash, handle;
+  function rebuildWhip() {
+    lashG.replaceChildren(); handleG.replaceChildren();
+    lash = buildLash(lashG); handle = buildHandle(handleG);
+  }
+  rebuildWhip();
+
+  // Хлыст: цепочка Verlet.
+  const N = 26, SEG = 7.4, LASH = N * SEG, REACH = LASH + (TIP_X - GRIP_X) + 30;
+  // Щелчок, только когда петля почти развернулась: кончик впереди кисти хотя бы на столько.
+  const CRACK_AHEAD = 160;
+  const pts = Array.from({ length: N }, (_, i) => ({ x: 500, y: 200 + i * SEG, px: 500, py: 200 + i * SEG }));
+
+  const S = {
+    active: false, keyHeld: false, mouse: { x: 500, y: 200 }, vel: { x: 0, y: 0 },
+    aim: -0.9, angle: -0.9, mode: 'ready', t: 0, key: null, cracked: false, off: { x: 0, y: 0 }, resid: { x: 0, y: 0 }, spinPhase: 0,
+    spin: 0, spinTime: 0, power: false, wrap: null,
+  };
+
+  function toStage(e) {
+    const r = svg.getBoundingClientRect();
+    return { x: (e.clientX - r.left) * W / r.width, y: (e.clientY - r.top) * H / r.height };
+  }
+  function setActive(on) {
+    if (on === S.active) return;
+    S.active = on;
+    svg.classList.toggle('whip', on);
+    layerWhip.style.display = on ? '' : 'none';
+    if (on) resetLash();
+    if (!on) { S.mode = 'ready'; S.wrap = null; }
+  }
+  function resetLash() {
+    const tip = handleTip();
+    pts.forEach((p, i) => { p.x = p.px = tip.x; p.y = p.py = tip.y + i * SEG; });
+  }
+  function refreshActive() { setActive(S.keyHeld || lockBox.checked); }
+
+  window.addEventListener('keydown', e => { if (e.key === 'Alt') { S.keyHeld = true; refreshActive(); e.preventDefault(); } });
+  window.addEventListener('keyup', e => { if (e.key === 'Alt') { S.keyHeld = false; refreshActive(); } });
+  window.addEventListener('blur', () => { S.keyHeld = false; refreshActive(); });
+  lockBox.addEventListener('change', refreshActive);
+
+  let lastMove = performance.now();
+  svg.addEventListener('pointermove', e => {
+    const p = toStage(e), now = performance.now(), dt = Math.max(1, now - lastMove) / 1000;
+    S.vel.x = lerp(S.vel.x, (p.x - S.mouse.x) / dt, 0.3);
+    S.vel.y = lerp(S.vel.y, (p.y - S.mouse.y) / dt, 0.3);
+    S.mouse = p; lastMove = now;
+  });
+  svg.addEventListener('contextmenu', e => e.preventDefault());
+  svg.addEventListener('pointerdown', e => {
+    if (!S.active) return;
+    S.mouse = toStage(e);
+    if (e.button === 0 && S.mode === 'ready') startStrike(false);
+    if (e.button === 2 && S.mode === 'ready') { S.mode = 'spin'; S.spinTime = 0; S.spinPhase = S.angle - Math.PI / 2; }
+  });
+  window.addEventListener('pointerup', e => { if (e.button === 2 && S.mode === 'spin') releaseSpin(); });
+
+  function startStrike(power) {
+    S.mode = 'strike'; S.t = 0; S.cracked = false; S.power = power;
+    if (!power) S.lasso = false;
+    const a0 = S.angle, A = S.aim;
+    const dx = Math.cos(A), dy = Math.sin(A);
+    // Смещение кисти раскладываем на «вдоль прицела» (анимируется) и остаток (быстро гаснет).
+    const along0 = S.off.x * dx + S.off.y * dy;
+    S.resid = { x: S.off.x - dx * along0, y: S.off.y - dy * along0 };
+    if (power) {
+      // Бросок продолжает вращение раскрутки (по часовой), без разворота назад.
+      let delta = (((A - 0.3 - a0) % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI);
+      if (delta < 0.8) delta += 2 * Math.PI;
+      S.key = [[0, a0, null, along0], [0.09, a0 + delta, easeIn, 34], [0.42, a0 + delta + 0.3, easeOut, 0]];
+    } else {
+      // Замах назад «через верх» с отводом кисти, бросок с выносом кисти вперёд, возврат.
+      const back = A - Math.sign(Math.cos(A) || 1) * Math.PI * 0.85;
+      S.key = [[0, a0, null, along0], [0.13, a0 + angDiff(a0, back), easeOut, -22],
+               [0.21, back + angDiff(back, A - 0.3), easeIn, 30], [0.5, A, easeOut, 0]];
+    }
+  }
+  function releaseSpin() {
+    const T = target;
+    const tip = handleTip();
+    const d = Math.hypot(T.x - S.mouse.x, T.y - S.mouse.y);
+    // Досягаемость: хлыст + рукоять + запас на вынос кисти.
+    S.lasso = mode === 'game' && d < REACH;
+    if (S.lasso) S.aim = Math.atan2(T.y - S.mouse.y, T.x - S.mouse.x);
+    S.chargeOnRelease = clamp(S.spinTime / 1.2, 0, 1);
+    startStrike(true);
+  }
+  // Ключ: [время, угол рукояти, функция сглаживания, вынос кисти вдоль прицела].
+  function keyAt(t) {
+    const k = S.key;
+    for (let i = 1; i < k.length; i++) {
+      if (t <= k[i][0]) {
+        const u = (k[i][2] || (x => x))(clamp((t - k[i - 1][0]) / (k[i][0] - k[i - 1][0]), 0, 1));
+        return { a: lerp(k[i - 1][1], k[i][1], u), along: lerp(k[i - 1][3], k[i][3], u) };
+      }
+    }
+    return null;
+  }
+  // Насколько точка впереди кисти по направлению удара.
+  function ahead(p) { const h = hand(); return (p.x - h.x) * Math.cos(S.aim) + (p.y - h.y) * Math.sin(S.aim); }
+  // Прошла ли дальняя половина хлыста рядом с точкой.
+  function lashNear(p, r) {
+    for (let i = N >> 1; i < N; i++) if (Math.hypot(pts[i].x - p.x, pts[i].y - p.y) < r) return true;
+    return false;
+  }
+  function hand() { return { x: S.mouse.x + S.off.x, y: S.mouse.y + S.off.y }; }
+  function handleTip() {
+    const d = TIP_X - GRIP_X, h = hand();
+    return { x: h.x + Math.cos(S.angle) * d, y: h.y + Math.sin(S.angle) * d };
+  }
+
+  // ---------- эффект щелчка ----------
+  const fx = [];
+  let recording = null;
+  function crack(x, y, big) {
+    if (recording) { recording.crack = { x, y, big }; return; }
+    const g = el('g', { transform: `translate(${x} ${y})` }, layerFx);
+    const flash = el('circle', { r: 2, fill: '#fff4c2' }, g);
+    const ring = el('circle', { r: 4, fill: 'none', stroke: '#ffe9a8', 'stroke-width': 1.5 }, g);
+    const rays = el('path', { stroke: C.accent, 'stroke-width': 1.6, 'stroke-linecap': 'round', fill: 'none' }, g);
+    // Искры разлетаются и падают, пыль расплывается.
+    const sparks = Array.from({ length: big ? 14 : 9 }, () => {
+      const a = Math.random() * Math.PI * 2, v = 160 + Math.random() * 220;
+      return { e: el('circle', { r: 1.3, fill: '#fff1b8' }, g), vx: Math.cos(a) * v, vy: Math.sin(a) * v - 60 };
+    });
+    const dust = [0, 1, 2].map(j => el('circle', { r: 3, fill: '#c9b89a', opacity: 0.0 }, g));
+    fx.push({ g, flash, ring, rays, sparks, dust, t: 0, big, rot: Math.random() * Math.PI });
+    onCrack(x, y, big);
+  }
+  function updateFx(dt) {
+    for (let i = fx.length - 1; i >= 0; i--) {
+      const f = fx[i]; f.t += dt;
+      const k = f.big ? 1.6 : 1, u = f.t / 0.4;
+      if (u >= 1) { f.g.remove(); fx.splice(i, 1); continue; }
+      f.flash.setAttribute('r', 3 + 12 * k * easeOut(Math.min(1, u * 3)));
+      f.flash.setAttribute('opacity', Math.max(0, 1 - u * 3));
+      f.ring.setAttribute('r', 4 + 34 * k * easeOut(u));
+      f.ring.setAttribute('opacity', 1 - u);
+      let d = '';
+      for (let j = 0; j < 8; j++) {
+        const a = f.rot + j * Math.PI / 4, r0 = 6 + 10 * k * u, r1 = r0 + 10 * k * (1 - u);
+        d += `M${Math.cos(a) * r0} ${Math.sin(a) * r0} L${Math.cos(a) * r1} ${Math.sin(a) * r1} `;
+      }
+      f.rays.setAttribute('d', d);
+      f.rays.setAttribute('opacity', 1 - u);
+      for (const s of f.sparks) {
+        const tt = f.t;
+        s.e.setAttribute('cx', s.vx * tt); s.e.setAttribute('cy', s.vy * tt + 500 * tt * tt);
+        s.e.setAttribute('r', 1.4 * (1 - u)); s.e.setAttribute('opacity', 1 - u);
+      }
+      f.dust.forEach((e, j) => {
+        e.setAttribute('cx', (j - 1) * 7 * k); e.setAttribute('cy', 4 + 6 * u);
+        e.setAttribute('r', (4 + 12 * u) * k); e.setAttribute('opacity', 0.22 * (1 - u));
+      });
+    }
+  }
+
+  // ---------- паук-мишень ----------
+  const target = { x: 760, y: 330, vx: 0, vy: 0, heading: Math.PI, state: 'wander', t: 0, goal: null, phase: 0, flash: 0 };
+  const tg = el('g', {}, layerTarget);
+  const tLegs = el('path', { stroke: '#3a3aff', 'stroke-width': 1.3, fill: 'none', 'stroke-linejoin': 'round' }, tg);
+  const tDots = el('path', { stroke: '#ffffff', 'stroke-width': 2.4, 'stroke-linecap': 'round', fill: 'none' }, tg);
+  const tBody = el('rect', { x: -12, y: -7, width: 24, height: 14, rx: 2, fill: 'none', stroke: '#7fe0b0', 'stroke-width': 1.4 }, tg);
+  const tHead = el('circle', { cx: 7, cy: 0, r: 3.4, fill: '#fff' }, tg);
+
+  function hitTest(x, y, big) {
+    if (target.state === 'wrapped') return;
+    if (Math.hypot(target.x - x, target.y - y) < (big ? 55 : 42)) {
+      score.hits++;
+      target.state = 'stunned'; target.t = 0; target.flash = 1;
+      const a = Math.atan2(target.y - y, target.x - x) || 0;
+      target.vx = Math.cos(a) * 160; target.vy = Math.sin(a) * 160;
+    }
+  }
+  function updateTarget(dt) {
+    const T = target; T.t += dt; T.flash = Math.max(0, T.flash - dt * 2.5);
+    let speed = 0;
+    if (T.state === 'wander') {
+      if (!T.goal || Math.hypot(T.goal.x - T.x, T.goal.y - T.y) < 10) {
+        T.goal = { x: 120 + Math.random() * (W - 240), y: 90 + Math.random() * (H - 180) };
+      }
+      const a = Math.atan2(T.goal.y - T.y, T.goal.x - T.x);
+      T.vx = lerp(T.vx, Math.cos(a) * 70, 0.05); T.vy = lerp(T.vy, Math.sin(a) * 70, 0.05);
+    } else if (T.state === 'stunned') {
+      T.vx *= 0.9; T.vy *= 0.9;
+      if (T.t > 0.45) { T.state = 'flee'; T.t = 0; }
+    } else if (T.state === 'flee') {
+      const a = Math.atan2(T.y - S.mouse.y, T.x - S.mouse.x);
+      const sp = lerp(420, 70, clamp(T.t / 1.4, 0, 1));
+      T.vx = lerp(T.vx, Math.cos(a) * sp, 0.15); T.vy = lerp(T.vy, Math.sin(a) * sp, 0.15);
+      if (T.t > 1.4) { T.state = 'wander'; T.goal = null; }
+    }
+    if (T.state !== 'wrapped') {
+      T.x += T.vx * dt; T.y += T.vy * dt;
+      if (T.x < 30 || T.x > W - 30) { T.vx *= -1; T.x = clamp(T.x, 30, W - 30); }
+      if (T.y < 30 || T.y > H - 30) { T.vy *= -1; T.y = clamp(T.y, 30, H - 30); }
+      speed = Math.hypot(T.vx, T.vy);
+      if (speed > 8) T.heading += angDiff(T.heading, Math.atan2(T.vy, T.vx)) * Math.min(1, dt * 8);
+    }
+    T.phase += (T.state === 'wrapped' ? 900 : speed) * dt * 0.09;
+    drawTarget();
+  }
+  function drawTarget() {
+    const T = target, curl = T.state === 'stunned' || T.state === 'wrapped';
+    const spread = [40, 80, 115, 150], along = [5, 2, -2, -5];
+    const fx_ = Math.cos(T.heading), fy = Math.sin(T.heading);
+    let legs = '', dots = '';
+    for (let k = 0; k < 4; k++) for (const side of [-1, 1]) {
+      const sw = Math.sin(T.phase + (k % 2 ? Math.PI : 0) + (side > 0 ? Math.PI : 0)) * 0.22;
+      const hx = T.x + fx_ * along[k], hy = T.y + fy * along[k];
+      const R = curl ? 16 : 30;
+      const aKnee = T.heading + side * (spread[k] * Math.PI / 180 * 0.75 + sw);
+      const aFoot = T.heading + side * (spread[k] * Math.PI / 180 + sw);
+      const kx = hx + Math.cos(aKnee) * R * 0.6 + Math.cos(aKnee + side * Math.PI / 2) * 4, ky = hy + Math.sin(aKnee) * R * 0.6 + Math.sin(aKnee + side * Math.PI / 2) * 4;
+      const footx = hx + Math.cos(aFoot) * R, footy = hy + Math.sin(aFoot) * R;
+      legs += `M${hx} ${hy} L${kx} ${ky} L${footx} ${footy} `;
+      dots += `M${kx} ${ky} h0 M${footx} ${footy} h0 `;
+    }
+    tLegs.setAttribute('d', legs); tDots.setAttribute('d', dots);
+    const deg = T.heading * 180 / Math.PI;
+    tBody.setAttribute('transform', `translate(${T.x} ${T.y}) rotate(${deg})`);
+    tHead.setAttribute('transform', `translate(${T.x} ${T.y}) rotate(${deg})`);
+    const red = T.flash > 0 ? `rgb(255,${Math.round(127 + 128 * (1 - T.flash))},${Math.round(176 * (1 - T.flash))})` : '#7fe0b0';
+    tBody.setAttribute('stroke', T.flash > 0 ? '#ff6b6b' : red);
+    tLegs.setAttribute('stroke', T.flash > 0.3 ? '#ff6b6b' : '#3a3aff');
+  }
+
+  // ---------- шаг симуляции ----------
+  const G = 800, DAMP = 0.998, ITER = 14, DT = 1 / 240;
+  function step(dt) {
+    // Направление удара — куда двигалась мышь.
+    const sp = Math.hypot(S.vel.x, S.vel.y);
+    if (S.mode === 'ready' && sp > 350) S.aim += angDiff(S.aim, Math.atan2(S.vel.y, S.vel.x)) * Math.min(1, dt * 6);
+    S.vel.x *= 0.98; S.vel.y *= 0.98;
+
+    const relax = Math.min(1, dt * 10);
+    if (S.mode === 'ready') {
+      S.angle += angDiff(S.angle, S.aim) * Math.min(1, dt * 8);
+      S.off.x -= S.off.x * relax; S.off.y -= S.off.y * relax;
+    } else if (S.mode === 'strike') {
+      S.t += dt;
+      const k = keyAt(S.t);
+      if (k === null) { S.mode = 'ready'; S.angle = S.aim; }
+      else {
+        S.angle = k.a;
+        const fade = Math.max(0, 1 - S.t / 0.1);
+        S.off.x = Math.cos(S.aim) * k.along + S.resid.x * fade;
+        S.off.y = Math.sin(S.aim) * k.along + S.resid.y * fade;
+      }
+    } else if (S.mode === 'spin') {
+      // Кисть ходит по кругу, рукоять смотрит по касательной, хлыст тянется следом.
+      S.spinTime += dt;
+      const charge = clamp(S.spinTime / 1.2, 0, 1);
+      S.spin = lerp(3, 10, charge);
+      S.spinPhase += S.spin * dt;
+      const R = lerp(6, 28, charge);
+      S.off.x = Math.cos(S.spinPhase) * R; S.off.y = Math.sin(S.spinPhase) * R;
+      S.angle = S.spinPhase + Math.PI / 2;
+    } else if (S.mode === 'wrap') {
+      const w = S.wrap; w.t += dt;
+      S.angle += angDiff(S.angle, S.aim) * Math.min(1, dt * 6);
+      const goal = { x: S.mouse.x + Math.cos(S.aim) * 70, y: S.mouse.y + Math.sin(S.aim) * 70 };
+      const u = easeOut(clamp(w.t / 0.7, 0, 1));
+      target.x = lerp(w.from.x, goal.x, u); target.y = lerp(w.from.y, goal.y, u);
+      if (w.t > 1.0) { S.mode = 'ready'; S.wrap = null; target.state = 'flee'; target.t = 0; target.flash = 0.6; }
+    }
+
+    // Verlet.
+    for (let i = 2; i < N; i++) {
+      const p = pts[i];
+      const vx = (p.x - p.px) * DAMP, vy = (p.y - p.py) * DAMP;
+      p.px = p.x; p.py = p.y;
+      p.x += vx; p.y += vy + (S.mode === 'spin' ? G * 0.25 : G) * dt * dt;
+    }
+    const tip = handleTip(), dir = { x: Math.cos(S.angle), y: Math.sin(S.angle) };
+    const pin = (i, x, y) => { pts[i].px = pts[i].x; pts[i].py = pts[i].y; pts[i].x = x; pts[i].y = y; };
+    pin(0, tip.x, tip.y);
+    pin(1, tip.x + dir.x * SEG, tip.y + dir.y * SEG);
+    const coil = S.mode === 'wrap' ? 9 : 0;
+    for (let it = 0; it < ITER; it++) {
+      for (let i = 1; i < N - 1; i++) {
+        const a = pts[i], b = pts[i + 1];
+        const dx = b.x - a.x, dy = b.y - a.y, d = Math.hypot(dx, dy) || 1e-6;
+        const diff = (d - SEG) / d;
+        const wa = i <= 1 ? 0 : 0.5, wb = i <= 1 ? 1 : 0.5;
+        a.x += dx * diff * wa; a.y += dy * diff * wa;
+        b.x -= dx * diff * wb; b.y -= dy * diff * wb;
+      }
+      // Лёгкая жёсткость на изгиб — волна идёт плавнее.
+      for (let i = 1; i < N - 2; i++) {
+        const a = pts[i], c = pts[i + 2];
+        const dx = c.x - a.x, dy = c.y - a.y, d = Math.hypot(dx, dy) || 1e-6;
+        if (d < SEG * 1.6) {
+          const diff = (d - SEG * 1.6) / d * 0.15;
+          if (i > 1) { a.x += dx * diff; a.y += dy * diff; }
+          c.x -= dx * diff; c.y -= dy * diff;
+        }
+      }
+      if (coil) {
+        const w = S.wrap;
+        for (let j = 0; j < coil; j++) {
+          const p = pts[N - coil + j], a = w.phase + j * 0.75;
+          p.x = target.x + Math.cos(a) * 13; p.y = target.y + Math.sin(a) * 13;
+        }
+        pts[0].x = tip.x; pts[0].y = tip.y;
+      }
+    }
+
+    // Щелчок: кончик превысил порог скорости во время броска.
+    if (S.mode === 'strike' && !S.cracked && S.t > (S.power ? 0.04 : 0.15)) {
+      const e = pts[N - 1], v = Math.hypot(e.x - e.px, e.y - e.py) / dt;
+      if (S.power && S.lasso && lashNear(target, 30) && target.state !== 'wrapped') {
+        S.cracked = true; S.mode = 'wrap';
+        S.wrap = { t: 0, phase: Math.atan2(e.y - target.y, e.x - target.x), from: { x: target.x, y: target.y } };
+        target.state = 'wrapped'; target.flash = 1;
+        crack(e.x, e.y, false);
+      } else if ((!(S.power && S.lasso) && v > (S.power ? 1500 : 1800) && ahead(e) > CRACK_AHEAD) || S.t > (S.power ? 0.3 : 0.34)) {
+        S.cracked = true;
+        crack(e.x, e.y, S.power);
+      }
+    }
+  }
+
+  function render() {
+    handleG.setAttribute('transform', `translate(${hand().x} ${hand().y}) rotate(${S.angle * 180 / Math.PI}) translate(${-GRIP_X} 0)`);
+    handle.update(S.angle);
+    drawLash(lash, pts);
+    const charge = S.mode === 'spin' ? clamp(S.spinTime / 1.2, 0, 1) : 0;
+    chargeRing.setAttribute('cx', S.mouse.x); chargeRing.setAttribute('cy', S.mouse.y);
+    chargeRing.setAttribute('r', 38 + 6 * charge);
+    chargeRing.setAttribute('opacity', charge * 0.9);
+    status.textContent = !S.active ? 'курсор' : ({ ready: 'плеть', strike: S.power ? 'захлёст' : 'удар', spin: `раскрутка ${Math.round(charge * 100)}%`, wrap: 'поймал!' })[S.mode];
+  }
+
+  // ---------- раскадровка ----------
+  function record(kind, times) {
+    const saved = {
+      pts: pts.map(p => ({ ...p })), mouse: S.mouse, angle: S.angle, aim: S.aim, mode: S.mode, t: S.t,
+      key: S.key, cracked: S.cracked, power: S.power, spin: S.spin, spinTime: S.spinTime, wrap: S.wrap, vel: { ...S.vel },
+      off: { ...S.off }, resid: { ...S.resid }, spinPhase: S.spinPhase,
+      tx: target.x, ty: target.y, ts: target.state,
+    };
+    target.x = 1e6; target.y = 1e6;
+    S.mouse = { x: 0, y: 0 }; S.vel = { x: 0, y: 0 }; S.off = { x: 0, y: 0 }; S.aim = S.angle = -0.35; S.mode = 'ready';
+    pts.forEach((p, i) => { p.x = p.px = 30 + i * 2; p.y = p.py = i * SEG; });
+    for (let i = 0; i < 480; i++) step(DT);
+    recording = { crack: null };
+    const frames = [];
+    let t = 0, ti = 0, released = false;
+    if (kind === 'strike') startStrike(false); else { S.mode = 'spin'; S.spinTime = 0; S.spinPhase = S.angle - Math.PI / 2; }
+    while (ti < times.length) {
+      if (kind === 'spin' && !released && t >= 1.25) { released = true; releaseSpin(); }
+      step(DT); t += DT;
+      if (recording.crack && !recording.crack.t) recording.crack.t = t;
+      if (t >= times[ti] - 1e-9) {
+        frames.push({ t: times[ti], angle: S.angle, hand: { ...S.off }, pts: pts.map(p => ({ x: p.x, y: p.y })), crack: recording.crack && !recording.crack.used ? recording.crack : null });
+        if (recording.crack) recording.crack.used = true;
+        ti++;
+      }
+    }
+    const crackT = recording.crack ? recording.crack.t : null;
+    recording = null;
+    Object.assign(S, { mouse: saved.mouse, angle: saved.angle, aim: saved.aim, mode: saved.mode, t: saved.t, key: saved.key,
+      cracked: saved.cracked, power: saved.power, spin: saved.spin, spinTime: saved.spinTime, wrap: saved.wrap, vel: saved.vel,
+      off: saved.off, resid: saved.resid, spinPhase: saved.spinPhase });
+    saved.pts.forEach((p, i) => Object.assign(pts[i], p));
+    target.x = saved.tx; target.y = saved.ty; target.state = saved.ts;
+    return { frames, crackT };
+  }
+  function drawFilm() {
+    const film = document.getElementById('film');
+    film.replaceChildren();
+    // Пробный прогон находит момент щелчка, кадры раскладываем вокруг него.
+    const tcS = record('strike', [0.6]).crackT ?? 0.22;
+    const tcP = record('spin', [1.9]).crackT ?? 1.4;
+    const rows = [
+      ['Удар (ЛКМ)', record('strike', [0, 0.07, 0.13, (0.13 + tcS) / 2, tcS, tcS + 0.05, 0.38, 0.55]).frames,
+        ['покой', 'замах', 'замах', 'бросок', 'щелчок', 'волна', 'возврат', 'возврат']],
+      ['Раскрутка → захлёст (ПКМ)', record('spin', [0.2, 0.5, 0.8, 1.1, 1.25, (1.25 + tcP) / 2, tcP, tcP + 0.3]).frames,
+        ['раскрутка', 'раскрутка', 'раскрутка', 'заряд 90%', 'отпустил', 'бросок', 'щелчок', 'возврат']],
+    ];
+    const PW = 140, PH = 200, SC = 0.42;
+    rows.forEach(([title, frames, captions], r) => {
+      const oy = r * (PH + 35);
+      const tt = el('text', { x: 4, y: oy + 14, fill: C.accent, 'font-size': 14, 'font-weight': 600 }, film);
+      tt.textContent = title;
+      frames.forEach((f, i) => {
+        const ox = i * PW;
+        el('rect', { x: ox + 2, y: oy + 22, width: PW - 6, height: PH - 6, rx: 8, fill: '#07070c', stroke: '#26263a' }, film);
+        const g = el('g', { transform: `translate(${ox + PW / 2} ${oy + 22 + 78}) scale(${SC})` }, film);
+        const l = buildLash(g);
+        drawLash(l, f.pts);
+        const hg = el('g', { transform: `translate(${f.hand.x} ${f.hand.y}) rotate(${f.angle * 180 / Math.PI}) translate(${-GRIP_X} 0)` }, g);
+        buildHandle(hg, skin, f.angle);
+        el('path', { d: 'M-12 0 H12 M0 -12 V12', stroke: '#7fe0b0', 'stroke-width': 2.4 }, g);
+        if (f.crack) {
+          let d = '';
+          for (let j = 0; j < 8; j++) { const a = j * Math.PI / 4, r0 = j % 2 ? 8 : 14; d += (j ? 'L' : 'M') + (f.crack.x + Math.cos(a) * r0 * 2) + ' ' + (f.crack.y + Math.sin(a) * r0 * 2); }
+          el('path', { d: d + 'Z', fill: '#ffe9a8', stroke: C.accent, 'stroke-width': 2 }, g);
+        }
+        const c = el('text', { x: ox + PW / 2 - 2, y: oy + 22 + PH - 14, fill: '#c8c8dc', 'font-size': 12, 'text-anchor': 'middle' }, film);
+        c.textContent = `${captions[i]} · ${Math.round(f.t * 1000)} мс`;
+      });
+    });
+  }
+  drawFilm();
+
+  // Отладочный доступ для проверки из консоли.
+  window.__whip = { S, target, step, releaseSpin, startStrike, setActive, resetLash, render, DT };
+
+  // ---------- режимы ----------
+  const score = { strikes: 0, hits: 0, onApp: 0 };
+  const scoreEl = document.getElementById('score');
+  function showScore() {
+    scoreEl.textContent = mode === 'game'
+      ? `попаданий: ${score.hits} из ${score.strikes}`
+      : `ударов: ${score.strikes}, по окну: ${score.onApp}`;
+  }
+  document.getElementById('mode').onchange = e => {
+    mode = e.target.value;
+    score.strikes = score.hits = score.onApp = 0;
+    layerTarget.style.display = mode === 'game' ? '' : 'none';
+    layerApp.style.display = mode === 'plain' ? '' : 'none';
+    layerWelts.replaceChildren(); welts.length = 0;
+    showScore();
+  };
+  // Панель «Вид»: тон кожи, сторона света, сила блика — всё перерисовывается сразу.
+  const toneSel = document.getElementById('tone'), toneColor = document.getElementById('toneColor');
+  const lightSel = document.getElementById('light'), glossIn = document.getElementById('gloss'), glossVal = document.getElementById('glossVal');
+  function applyLook() {
+    setLight(lightSel.value);
+    GLOSS = +glossIn.value;
+    glossVal.textContent = GLOSS < 0.2 ? 'матовый' : GLOSS < 0.4 ? 'слабый' : GLOSS <= 0.6 ? 'средний' : GLOSS < 0.85 ? 'сильный' : 'лак';
+    toneColor.style.display = toneSel.value === 'custom' ? '' : 'none';
+    skin = toneSel.value === 'custom' ? makeLeather(toneColor.value) : TONES[toneSel.value];
+    drawModel(); drawDetails(); rebuildWhip(); drawFilm();
+  }
+  for (const e of [toneSel, toneColor, lightSel, glossIn]) e.addEventListener('input', applyLook);
+  toneColor.style.display = 'none';
+
+  // «Зависший мессенджер» — условное окно для режима «просто плеть».
+  const APP = { x: 500, y: 110, w: 400, h: 270, shake: 0 };
+  const appG = el('g', {}, layerApp);
+  el('rect', { x: 4, y: 8, width: APP.w, height: APP.h, rx: 12, fill: '#000', opacity: 0.35 }, appG);
+  el('rect', { width: APP.w, height: APP.h, rx: 12, fill: '#f4f4f8', stroke: '#c8c8d4' }, appG);
+  el('path', { d: `M0 12 a12 12 0 0 1 12 -12 H${APP.w - 12} a12 12 0 0 1 12 12 V32 H0 Z`, fill: '#e2e2ea' }, appG);
+  ['#ff6159', '#ffbd2e', '#28c941'].forEach((c, i) => el('circle', { cx: 16 + i * 18, cy: 16, r: 5.5, fill: c }, appG));
+  const appTitle = el('text', { x: APP.w / 2, y: 21, fill: '#44445a', 'font-size': 13, 'text-anchor': 'middle' }, appG);
+  appTitle.textContent = 'Мессенджер (не отвечает)';
+  [[20, 52, 190, '#dcdce6'], [190, 96, 190, '#cfe0ff'], [20, 140, 230, '#dcdce6'], [150, 184, 230, '#cfe0ff']].forEach(([x, y, w, c]) =>
+    el('rect', { x, y, width: w, height: 32, rx: 10, fill: c }, appG));
+  el('rect', { y: 32, width: APP.w, height: APP.h - 32, fill: '#fff', opacity: 0.45 }, appG);
+  const spinner = el('circle', { cx: APP.w / 2, cy: 150, r: 18, fill: 'none', stroke: '#7a7a90', 'stroke-width': 4, 'stroke-dasharray': '28 85', 'stroke-linecap': 'round' }, appG);
+  layerApp.style.display = 'none';
+
+  // След от удара: красная полоса вдоль хлыста, гаснет за 2,5 с.
+  const welts = [];
+  function addWelt(x, y, big) {
+    const a = Math.atan2(pts[N - 1].y - pts[N - 4].y, pts[N - 1].x - pts[N - 4].x);
+    const l = big ? 26 : 18, dx = Math.cos(a) * l, dy = Math.sin(a) * l;
+    const g = el('g', {}, layerWelts);
+    el('path', { d: `M${x - dx} ${y - dy} Q${x - dy * 0.25} ${y + dx * 0.25} ${x + dx} ${y + dy}`, stroke: '#ff4d6d', 'stroke-width': big ? 5 : 3.5, 'stroke-linecap': 'round', fill: 'none', opacity: 0.85 }, g);
+    el('path', { d: `M${x - dx * 0.8} ${y - dy * 0.8} Q${x - dy * 0.25} ${y + dx * 0.25} ${x + dx * 0.8} ${y + dy * 0.8}`, stroke: '#ffd0d8', 'stroke-width': 1, 'stroke-linecap': 'round', fill: 'none' }, g);
+    welts.push({ g, t: 0 });
+  }
+  function onCrack(x, y, big) {
+    score.strikes++;
+    if (mode === 'game') { hitTest(x, y, big); }
+    else {
+      addWelt(x, y, big);
+      if (x > APP.x && x < APP.x + APP.w && y > APP.y && y < APP.y + APP.h) { score.onApp++; APP.shake = big ? 0.5 : 0.35; }
+    }
+    showScore();
+  }
+  let spinA = 0;
+  function updateApp(dt) {
+    spinA += dt * 300;
+    spinner.setAttribute('transform', `rotate(${spinA} ${APP.w / 2} 150)`);
+    APP.shake = Math.max(0, APP.shake - dt);
+    const k = APP.shake * 14;
+    appG.setAttribute('transform', `translate(${APP.x + (Math.random() - 0.5) * k} ${APP.y + (Math.random() - 0.5) * k})`);
+    for (let i = welts.length - 1; i >= 0; i--) {
+      const w = welts[i]; w.t += dt;
+      if (w.t > 2.5) { w.g.remove(); welts.splice(i, 1); continue; }
+      w.g.setAttribute('opacity', w.t < 1.5 ? 1 : 1 - (w.t - 1.5));
+    }
+  }
+  showScore();
+
+  // ---------- демо-кнопки ----------
+  let demo = null;
+  function runDemo(kind) {
+    lockBox.checked = true; refreshActive();
+    S.mouse = { x: 360, y: 300 }; S.aim = -0.35; S.angle = -0.35; resetLash();
+    target.x = 560; target.y = 240; target.state = 'wander'; target.goal = { x: 590, y: 250 };
+    S.mode = 'ready';
+    demo = { kind, t: 0, fired: false };
+  }
+  function updateDemo(dt) {
+    if (!demo) return;
+    demo.t += dt;
+    if (demo.kind === 'strike' && !demo.fired && demo.t > 0.6) { demo.fired = true; startStrike(false); }
+    if (demo.kind === 'spin') {
+      if (!demo.fired && demo.t > 0.5) { demo.fired = true; S.mode = 'spin'; S.spinTime = 0; S.spinPhase = S.angle - Math.PI / 2; }
+      if (demo.fired && S.mode === 'spin' && S.spinTime > 1.3) releaseSpin();
+    }
+    if (demo.t > 4) demo = null;
+  }
+  document.getElementById('demoStrike').onclick = () => runDemo('strike');
+  document.getElementById('demoSpin').onclick = () => runDemo('spin');
+
+  // ---------- цикл ----------
+  setActive(false);
+  let last = performance.now(), acc = 0;
+  function frame(now) {
+    const real = Math.min(0.05, (now - last) / 1000); last = now;
+    acc += real;
+    while (acc >= DT) {
+      updateDemo(DT);
+      if (S.active) step(DT);
+      if (S.wrap) S.wrap.phase += DT * 2;
+      acc -= DT;
+    }
+    updateFx(real);
+    if (mode === 'game') updateTarget(real); else updateApp(real);
+    if (S.active) render(); else status.textContent = 'курсор';
+    requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>

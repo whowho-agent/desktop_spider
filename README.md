@@ -51,11 +51,10 @@ Rust + wgpu, прозрачное окно поверх всего, клики �
 
 ## Настройка
 
-**`config.toml`** — режим, плеть, пресет; меню пишет сюда само.
+**`config.toml`** — плеть и пресет; меню пишет сюда само. Программа всегда стартует в режиме «Просто плеть», режим меняется в меню.
 macOS: `~/Library/Application Support/DesktopSpider/config.toml`, Windows: `%APPDATA%\DesktopSpider\config.toml`.
 
 ```toml
-mode = "game"          # spider | game | whip
 whip_skin = "black"    # light | black
 whip_size = 1.4        # 0.5 – 3
 whip_hotkey = "ctrl+alt"   # модификаторы ctrl/alt/shift/cmd (+ клавиша, например "ctrl+alt+w")
