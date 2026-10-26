@@ -69,6 +69,49 @@ impl WhipSkin {
     }
 }
 
+/// Тон кожи плети. Палитра строится из базового цвета (`whip::skin::palette`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+pub enum Leather {
+    #[default]
+    Natural,
+    Cognac,
+    Chocolate,
+    Burgundy,
+    Black,
+    /// Свой цвет `#rrggbb`.
+    Custom([u8; 3]),
+}
+
+impl Leather {
+    /// Базовый цвет кожи, sRGB.
+    pub fn rgb(self) -> [u8; 3] {
+        match self {
+            Leather::Natural => [0x77, 0x46, 0x1f],
+            Leather::Cognac => [0x8a, 0x47, 0x19],
+            Leather::Chocolate => [0x4a, 0x28, 0x16],
+            Leather::Burgundy => [0x5e, 0x1c, 0x24],
+            Leather::Black => [0x12, 0x12, 0x17],
+            Leather::Custom(c) => c,
+        }
+    }
+}
+
+/// Сторона источника света: блик сильнее с этой стороны, тень — в противоположную.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+pub enum LightSide {
+    #[default]
+    Left,
+    Right,
+}
+
+impl LightSide {
+    /// Единичное направление на свет в экранных координатах (Y вниз): сверху слева / справа.
+    pub fn dir(self) -> glam::Vec2 {
+        let x = if self == LightSide::Right { 0.45 } else { -0.45 };
+        glam::Vec2::new(x, -0.89).normalize()
+    }
+}
+
 /// Сочетание для «удерживать — плеть». Модификаторы + необязательная обычная клавиша.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Hotkey {
@@ -224,6 +267,11 @@ pub struct Settings {
     pub whip_skin: WhipSkin,
     /// Множитель размера плети, `WHIP_SIZE_MIN..=WHIP_SIZE_MAX`.
     pub whip_size: f32,
+    /// Тон кожи (заменит `whip_skin`; старый ключ читается как natural / black).
+    pub whip_leather: Leather,
+    pub whip_light: LightSide,
+    /// Сила блика 0..1 (0,5 — средний).
+    pub whip_gloss: f32,
     pub whip_hotkey: Hotkey,
     /// Имя пресета паука; пусто — `$SPIDER_PRESET` или "spider".
     pub preset: String,
@@ -235,6 +283,9 @@ impl Default for Settings {
             mode: Mode::default(),
             whip_skin: WhipSkin::default(),
             whip_size: 1.0,
+            whip_leather: Leather::default(),
+            whip_light: LightSide::default(),
+            whip_gloss: 0.5,
             whip_hotkey: Hotkey::default(),
             preset: String::new(),
         }
@@ -396,6 +447,9 @@ mod tests {
             mode: Mode::Game,
             whip_skin: WhipSkin::Black,
             whip_size: 1.4,
+            whip_leather: Leather::default(),
+            whip_light: LightSide::default(),
+            whip_gloss: 0.5,
             whip_hotkey: Hotkey::parse("shift+cmd+F13").unwrap(),
             preset: "tarantula".into(),
         };

@@ -89,7 +89,7 @@ impl ApplicationHandler<UserEvent> for App {
             p
         });
         let cursor = platform::cursor_position(&window);
-        let mut world = World::new(&preset, settings.mode, settings.whip_skin, settings.whip_size, cursor);
+        let mut world = World::new(&preset, settings.mode, settings.whip_leather, settings.whip_light, settings.whip_size, cursor);
         world.set_bounds(logical_size(&window));
         let debug = std::env::var_os("SPIDER_DEBUG").is_some();
 
@@ -187,8 +187,10 @@ impl ApplicationHandler<UserEvent> for App {
             }
             TrayAction::Mode(m) => s.set_mode(m),
             TrayAction::Skin(skin) => {
+                // Временно (до нового меню): светлая/чёрная → натуральная/чёрная кожа.
                 s.settings.whip_skin = skin;
-                s.world.skin = skin;
+                s.settings.whip_leather = if skin == crate::settings::WhipSkin::Black { crate::settings::Leather::Black } else { crate::settings::Leather::Natural };
+                s.world.set_leather(s.settings.whip_leather);
                 s.save_settings();
             }
             TrayAction::Size(v) => {

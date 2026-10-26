@@ -5,6 +5,9 @@ use glam::Vec2;
 /// - круг: `a == b`, `ring_width == 0`;
 /// - кольцо: `a == b`, линия толщиной `2 * ring_width` на расстоянии `radius` от центра.
 /// Цвет НЕ premultiplied (обычный RGBA), рендер сам домножает.
+///
+/// `style = [вид, параметр]` — как закрашивать (см. `kind::*`). Свет для объёмных видов —
+/// общий для кадра: `Renderer::set_lighting(направление на свет, сила блика)`.
 #[repr(C)]
 #[derive(Clone, Copy, Debug, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct Shape {
@@ -12,8 +15,24 @@ pub struct Shape {
     pub b: [f32; 2],
     pub radius: f32,
     pub ring_width: f32,
-    pub _pad: [f32; 2],
+    pub style: [f32; 2],
     pub color: [f32; 4],
+}
+
+/// Виды фигур (`Shape::style[0]`).
+pub mod kind {
+    /// Плоская заливка `color` (отрезки, точки, кольца паука и эффектов).
+    pub const FLAT: f32 = 0.0;
+    /// Кожаная трубка: цилиндрическое затенение из базового цвета (тень → основа → свет → блик со стороны света).
+    pub const TUBE: f32 = 1.0;
+    /// Трубка с плетением: диагональные пряди двух тонов. Параметр — шаг прядей вдоль оси, pt.
+    pub const BRAID: f32 = 2.0;
+    /// Металлическая трубка: резче контраст, яркий узкий блик.
+    pub const METAL: f32 = 3.0;
+    /// Сфера (`a == b`): металл/кожа с бликом, смещённым к свету.
+    pub const SPHERE: f32 = 4.0;
+    /// Мягкая тень: капсула с размытым краем. Параметр — ширина размытия, pt.
+    pub const SOFT: f32 = 5.0;
 }
 
 #[derive(Default)]
@@ -41,14 +60,43 @@ impl DrawList {
         self.push(c, c, radius, width * 0.5, color);
     }
 
+    /// Кожаная трубка полной толщины `width` из базового цвета `color`.
+    pub fn tube(&mut self, a: Vec2, b: Vec2, width: f32, color: [f32; 4]) {
+        self.push_styled(a, b, width * 0.5, color, kind::TUBE, 0.0);
+    }
+
+    /// Плетёная трубка: пряди с шагом `period` pt вдоль оси.
+    pub fn braid(&mut self, a: Vec2, b: Vec2, width: f32, color: [f32; 4], period: f32) {
+        self.push_styled(a, b, width * 0.5, color, kind::BRAID, period);
+    }
+
+    /// Металлическая трубка (кольца, навершие сбоку).
+    pub fn metal(&mut self, a: Vec2, b: Vec2, width: f32, color: [f32; 4]) {
+        self.push_styled(a, b, width * 0.5, color, kind::METAL, 0.0);
+    }
+
+    /// Объёмная сфера с бликом к свету.
+    pub fn sphere(&mut self, c: Vec2, radius: f32, color: [f32; 4]) {
+        self.push_styled(c, c, radius, color, kind::SPHERE, 0.0);
+    }
+
+    /// Мягкая тень: капсула толщиной `width`, край размыт на `softness` pt.
+    pub fn soft(&mut self, a: Vec2, b: Vec2, width: f32, color: [f32; 4], softness: f32) {
+        self.push_styled(a, b, width * 0.5, color, kind::SOFT, softness);
+    }
+
     fn push(&mut self, a: Vec2, b: Vec2, radius: f32, ring_width: f32, color: [f32; 4]) {
         self.shapes.push(Shape {
             a: a.to_array(),
             b: b.to_array(),
             radius,
             ring_width,
-            _pad: [0.0; 2],
+            style: [kind::FLAT, 0.0],
             color,
         });
+    }
+
+    fn push_styled(&mut self, a: Vec2, b: Vec2, radius: f32, color: [f32; 4], k: f32, param: f32) {
+        self.shapes.push(Shape { a: a.to_array(), b: b.to_array(), radius, ring_width: 0.0, style: [k, param], color });
     }
 }

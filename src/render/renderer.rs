@@ -484,6 +484,12 @@ impl Renderer {
     }
 
     /// Viewport в точках = физический размер / scale factor.
+    /// Свет для объёмных фигур: единичное направление на источник (экран, Y вниз) и сила блика 0..1.
+    /// Контракт для агента шейдера; сейчас только запоминается.
+    pub fn set_lighting(&mut self, light: glam::Vec2, gloss: f32) {
+        let _ = (light, gloss);
+    }
+
     fn write_globals(&mut self) {
         let s = self.scale_factor as f32;
         let g = Globals {

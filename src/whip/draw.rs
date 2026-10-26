@@ -22,7 +22,13 @@ const ACCENT: [f32; 3] = [1.0, 0.827, 0.42];
 /// кончик рукояти TIP_X = 46 = `pose.rope[0]`; хлыст сужается 3,4 → 1,1 pt (полуширина) до 82% длины,
 /// дальше фол 0,7; насечки плетения через звено; хлопушка — 4 коротких луча на кончике.
 /// `pose.charge > 0` — пунктирное кольцо заряда вокруг курсора радиусом 38 + 6·charge.
-pub fn draw_whip(list: &mut DrawList, pose: &WhipPose, pal: &Palette) {
+pub fn draw_whip(list: &mut DrawList, pose: &WhipPose, pal: &super::skin::LeatherPalette, light: Vec2) {
+    // Заглушка контракта v2 (агент отрисовки перепишет): пока рисуем v1 светлой палитрой.
+    let _ = (pal, light);
+    draw_whip_v1(list, pose, &super::skin::LIGHT);
+}
+
+fn draw_whip_v1(list: &mut DrawList, pose: &WhipPose, pal: &Palette) {
     // Порядок как в эскизе: кольцо заряда, хлыст, рукоять поверх.
     if pose.charge > 0.0 {
         draw_charge(list, pose.hand, pose.charge.min(1.0), pose.scale);
@@ -278,7 +284,7 @@ mod tests {
                 let rope = arc_rope(tip_of(hand, angle), angle, bend);
                 let pose = WhipPose { hand, angle, rope: &rope, charge, scale: 1.0 };
                 let mut list = DrawList::default();
-                draw_whip(&mut list, &pose, pal);
+                draw_whip_v1(&mut list, &pose, pal);
                 assert!(list.shapes.len() > 60);
                 assert!(all_finite(&list));
             }
@@ -286,7 +292,7 @@ mod tests {
             let rope = vec![Vec2::new(10.0, 10.0); N];
             let pose = WhipPose { hand: Vec2::ZERO, angle: 0.0, rope: &rope, charge: 0.0, scale: 1.0 };
             let mut list = DrawList::default();
-            draw_whip(&mut list, &pose, pal);
+            draw_whip_v1(&mut list, &pose, pal);
             assert!(all_finite(&list));
         }
     }
@@ -328,14 +334,14 @@ mod tests {
                 let hand = hand + Vec2::new(0.0, k as f32 * 150.0);
                 let rope = arc_rope(tip_of(hand, angle), angle, bend);
                 let pose = WhipPose { hand, angle, rope: &rope, charge, scale: 1.0 };
-                draw_whip(&mut list, &pose, pal);
+                draw_whip_v1(&mut list, &pose, pal);
             }
         }
         // Та же светлая/чёрная поверх светлого окна.
         for (k, pal) in [&LIGHT, &BLACK].into_iter().enumerate() {
             let hand = Vec2::new(760.0, 420.0 + k as f32 * 150.0);
             let rope = arc_rope(tip_of(hand, 0.3), 0.3, 1.5);
-            draw_whip(&mut list, &WhipPose { hand, angle: 0.3, rope: &rope, charge: 0.6, scale: 1.0 }, pal);
+            draw_whip_v1(&mut list, &WhipPose { hand, angle: 0.3, rope: &rope, charge: 0.6, scale: 1.0 }, pal);
         }
 
         // 3. Щелчок в разные моменты и усиленный, след.

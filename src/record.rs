@@ -10,7 +10,7 @@ use glam::Vec2;
 use crate::config::{self, Preset};
 use crate::input::WhipInput;
 use crate::render::{DrawList, Renderer};
-use crate::settings::{Mode, WhipSkin};
+use crate::settings::{Leather, LightSide, Mode};
 use crate::world::World;
 
 /// Кадр в логических точках; рендер ×SCALE пикселей.
@@ -31,7 +31,7 @@ pub fn run(args: &[String]) -> Result<(), String> {
     let preset = config::load_preset("spider").unwrap_or_else(|_| Preset::default());
     let mut sc = Scenario::new(mode)?;
     let start = sc.cursor(0.0, None);
-    let mut world = World::new(&preset, sc.mode, sc.skin, 1.0, start);
+    let mut world = World::new(&preset, sc.mode, sc.leather, LightSide::Left, 1.0, start);
     world.set_bounds(Vec2::new(W, H));
     if sc.mode != Mode::Whip {
         // Паук стартует в стороне от курсора.
@@ -153,7 +153,7 @@ enum Act {
 
 struct Scenario {
     mode: Mode,
-    skin: WhipSkin,
+    leather: Leather,
     secs: f32,
     spider_start: Vec2,
     path: Path,
@@ -180,7 +180,7 @@ impl Scenario {
         Ok(match mode {
             "spider" => Self {
                 mode: Mode::Spider,
-                skin: WhipSkin::Light,
+                leather: Leather::Natural,
                 secs: 9.0,
                 spider_start: Vec2::new(750.0, 475.0),
                 path: Path::new(
@@ -194,7 +194,7 @@ impl Scenario {
             },
             "game" => Self {
                 mode: Mode::Game,
-                skin: WhipSkin::Light,
+                leather: Leather::Natural,
                 secs: 11.0,
                 spider_start: Vec2::new(700.0, 325.0),
                 path: Path::new(
@@ -208,7 +208,7 @@ impl Scenario {
             },
             "whip" => Self {
                 mode: Mode::Whip,
-                skin: WhipSkin::Black,
+                leather: Leather::Black,
                 secs: 9.0,
                 spider_start: Vec2::ZERO,
                 path: Path::new(Vec2::new(325.0, 412.5), &[(3.6, 0.9, (337.5, 350.0))]),

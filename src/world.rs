@@ -6,7 +6,8 @@ use glam::Vec2;
 use crate::config::Preset;
 use crate::input::WhipInput;
 use crate::render::DrawList;
-use crate::settings::{Mode, WhipSkin};
+use crate::settings::{Leather, LightSide, Mode};
+use crate::whip::skin::{leather_palette, LeatherPalette};
 use crate::sim::Creature;
 use crate::whip::{Whip, WhipEvent};
 
@@ -14,7 +15,9 @@ pub struct World {
     pub creature: Creature,
     pub whip: Whip,
     mode: Mode,
-    pub skin: WhipSkin,
+    /// Вид плети: палитра кожи и сторона света.
+    pal: LeatherPalette,
+    pub light: LightSide,
     events: Vec<WhipEvent>,
     /// Счёт текущей сессии режима: попадания и удары.
     pub hits: u32,
@@ -26,17 +29,21 @@ pub struct World {
 }
 
 impl World {
-    pub fn new(preset: &Preset, mode: Mode, skin: WhipSkin, whip_size: f32, cursor: Vec2) -> Self {
+    pub fn new(preset: &Preset, mode: Mode, leather: Leather, light: LightSide, whip_size: f32, cursor: Vec2) -> Self {
         let mut creature = Creature::new(preset, cursor);
         creature.set_game(mode == Mode::Game);
         let mut whip = Whip::new(cursor);
         whip.set_scale(whip_size, cursor);
-        Self { creature, whip, mode, skin, events: Vec::new(), hits: 0, strikes: 0, last_crack: None, bounds: None }
+        Self { creature, whip, mode, pal: leather_palette(leather), light, events: Vec::new(), hits: 0, strikes: 0, last_crack: None, bounds: None }
     }
 
     #[allow(dead_code)]
     pub fn mode(&self) -> Mode {
         self.mode
+    }
+
+    pub fn set_leather(&mut self, leather: Leather) {
+        self.pal = leather_palette(leather);
     }
 
     /// Смена режима сбрасывает счёт и эффекты.
@@ -116,7 +123,7 @@ impl World {
             self.creature.draw(list, debug);
         }
         if self.mode != Mode::Spider {
-            self.whip.draw(list, self.skin, whip_visible);
+            self.whip.draw(list, &self.pal, self.light.dir(), whip_visible);
         }
     }
 }

@@ -14,7 +14,6 @@ use glam::Vec2;
 
 use crate::input::WhipInput;
 use crate::render::DrawList;
-use crate::settings::WhipSkin;
 use hand::{ease_out, Hand, Mode};
 use rope::Rope;
 
@@ -276,7 +275,8 @@ impl Whip {
     }
 
     /// Рисует плеть (если `visible`) и эффекты.
-    pub fn draw(&self, list: &mut DrawList, skin: WhipSkin, visible: bool) {
+    /// `pal` — палитра кожи (`skin::leather_palette`), `light` — направление на свет (для тени).
+    pub fn draw(&self, list: &mut DrawList, pal: &skin::LeatherPalette, light: Vec2, visible: bool) {
         // Порядок слоёв: следы под плетью, вспышки щелчков поверх.
         self.fx.draw_welts(list);
         if visible {
@@ -290,7 +290,7 @@ impl Whip {
                 charge: self.hand.charge(),
                 scale: k,
             };
-            draw::draw_whip(list, &pose, skin::palette(skin));
+            draw::draw_whip(list, &pose, pal, light);
         }
         self.fx.draw_cracks(list);
     }

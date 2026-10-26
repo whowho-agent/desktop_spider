@@ -2,5 +2,5 @@
 mod batch;
 mod renderer;
 
-pub use batch::{DrawList, Shape};
+pub use batch::{kind, DrawList, Shape};
 pub use renderer::Renderer;
