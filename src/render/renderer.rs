@@ -32,6 +32,8 @@ pub struct Renderer {
     height: u32,
     scale_factor: f64,
     pipeline: wgpu::RenderPipeline,
+    /// Тени (SOFT): смешивание «максимум» — перекрытия капсул не темнеют, тень ровная.
+    shadow_pipeline: wgpu::RenderPipeline,
     globals_buf: wgpu::Buffer,
     bind_group: wgpu::BindGroup,
     instances: wgpu::Buffer,
@@ -283,7 +285,7 @@ impl Renderer {
         height: u32,
         scale_factor: f64,
     ) -> Self {
-        let (pipeline, globals_buf, bind_group) = create_pipeline(&device, format);
+        let (pipeline, shadow_pipeline, globals_buf, bind_group) = create_pipeline(&device, format);
         let capacity = 256;
         let instances = Self::create_instances(&device, capacity);
         let mut r = Self {
@@ -294,6 +296,7 @@ impl Renderer {
             height,
             scale_factor,
             pipeline,
+            shadow_pipeline,
             globals_buf,
             bind_group,
             instances,
@@ -477,10 +480,21 @@ impl Renderer {
                 occlusion_query_set: None,
             });
             if n > 0 {
-                pass.set_pipeline(&self.pipeline);
                 pass.set_bind_group(0, &self.bind_group, &[]);
                 pass.set_vertex_buffer(0, self.instances.slice(..n as u64 * SHAPE_SIZE));
-                pass.draw(0..4, 0..n as u32);
+                // Порядок фигур сохраняется; подряд идущие тени — своим пайплайном.
+                let is_soft = |i: usize| list.shapes[i].style[0] == super::batch::kind::SOFT;
+                let mut i = 0;
+                while i < n {
+                    let soft = is_soft(i);
+                    let mut j = i + 1;
+                    while j < n && is_soft(j) == soft {
+                        j += 1;
+                    }
+                    pass.set_pipeline(if soft { &self.shadow_pipeline } else { &self.pipeline });
+                    pass.draw(0..4, i as u32..j as u32);
+                    i = j;
+                }
             }
         }
         encoder
@@ -525,7 +539,7 @@ impl Renderer {
 fn create_pipeline(
     device: &wgpu::Device,
     format: wgpu::TextureFormat,
-) -> (wgpu::RenderPipeline, wgpu::Buffer, wgpu::BindGroup) {
+) -> (wgpu::RenderPipeline, wgpu::RenderPipeline, wgpu::Buffer, wgpu::BindGroup) {
     let globals_buf = device.create_buffer(&wgpu::BufferDescriptor {
         label: Some("globals"),
         size: std::mem::size_of::<Globals>() as u64,
@@ -577,40 +591,48 @@ fn create_pipeline(
         attr(3, 32, wgpu::VertexFormat::Float32x4),
         attr(4, 24, wgpu::VertexFormat::Float32x2),
     ];
-    let pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-        label: Some("shapes"),
-        layout: Some(&layout),
-        vertex: wgpu::VertexState {
-            module: &shader,
-            entry_point: Some("vs_main"),
-            compilation_options: Default::default(),
-            buffers: &[wgpu::VertexBufferLayout {
-                array_stride: SHAPE_SIZE,
-                step_mode: wgpu::VertexStepMode::Instance,
-                attributes: &attributes,
-            }],
-        },
-        primitive: wgpu::PrimitiveState {
-            topology: wgpu::PrimitiveTopology::TriangleStrip,
-            cull_mode: None,
-            ..Default::default()
-        },
-        depth_stencil: None,
-        multisample: wgpu::MultisampleState::default(),
-        fragment: Some(wgpu::FragmentState {
-            module: &shader,
-            entry_point: Some("fs_main"),
-            compilation_options: Default::default(),
-            targets: &[Some(wgpu::ColorTargetState {
-                format,
-                blend: Some(wgpu::BlendState::PREMULTIPLIED_ALPHA_BLENDING),
-                write_mask: wgpu::ColorWrites::ALL,
-            })],
-        }),
-        multiview: None,
-        cache: None,
-    });
-    (pipeline, globals_buf, bind_group)
+    // Один и тот же шейдер; пайплайны отличаются только смешиванием.
+    let make = |label: &str, blend: wgpu::BlendState| {
+        device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: Some(label),
+            layout: Some(&layout),
+            vertex: wgpu::VertexState {
+                module: &shader,
+                entry_point: Some("vs_main"),
+                compilation_options: Default::default(),
+                buffers: &[wgpu::VertexBufferLayout {
+                    array_stride: SHAPE_SIZE,
+                    step_mode: wgpu::VertexStepMode::Instance,
+                    attributes: &attributes,
+                }],
+            },
+            primitive: wgpu::PrimitiveState {
+                topology: wgpu::PrimitiveTopology::TriangleStrip,
+                cull_mode: None,
+                ..Default::default()
+            },
+            depth_stencil: None,
+            multisample: wgpu::MultisampleState::default(),
+            fragment: Some(wgpu::FragmentState {
+                module: &shader,
+                entry_point: Some("fs_main"),
+                compilation_options: Default::default(),
+                targets: &[Some(wgpu::ColorTargetState { format, blend: Some(blend), write_mask: wgpu::ColorWrites::ALL })],
+            }),
+            multiview: None,
+            cache: None,
+        })
+    };
+    let pipeline = make("shapes", wgpu::BlendState::PREMULTIPLIED_ALPHA_BLENDING);
+    // Тень: (0,0,0,a) premultiplied, «максимум» по цвету и альфе — где капсулы перекрываются,
+    // берётся самая плотная, а не сумма. Поверх уже нарисованного цвет не меняется.
+    let max = wgpu::BlendComponent {
+        src_factor: wgpu::BlendFactor::One,
+        dst_factor: wgpu::BlendFactor::One,
+        operation: wgpu::BlendOperation::Max,
+    };
+    let shadow_pipeline = make("shadows", wgpu::BlendState { color: max, alpha: max });
+    (pipeline, shadow_pipeline, globals_buf, bind_group)
 }
 
 #[cfg(test)]

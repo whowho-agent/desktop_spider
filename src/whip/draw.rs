@@ -91,20 +91,15 @@ fn draw_shadow(list: &mut DrawList, pts: &[Vec2], f: &Frame, off: Vec2) {
     let col = [0.0, 0.0, 0.0, 0.3];
     let soft = 2.6 * s;
     let n = pts.len();
-    // Хлыст — через звено: меньше стыков, где полупрозрачные капсулы складываются.
-    if n >= 2 {
-        let mut i = 0;
-        while i < n - 1 {
-            let j = (i + 2).min(n - 1);
-            let w = (2.0 * half_w((i as f32 + 1.0) / (n - 1) as f32) + 1.5) * s;
-            list.soft(pts[i] + off, pts[j] + off, w, col, soft);
-            i = j;
-        }
+    // Хлыст — по всем звеньям: тени рисуются со смешиванием «максимум», стыки не темнеют.
+    for i in 0..n.saturating_sub(1) {
+        let w = (2.0 * half_w((i as f32 + 0.5) / (n - 1) as f32) + 1.5) * s;
+        list.soft(pts[i] + off, pts[i + 1] + off, w, col, soft);
     }
     list.soft(f.at(-9.0, 0.0) + off, f.at(TIP_X, 0.0) + off, 8.5 * s, [0.0, 0.0, 0.0, 0.32], soft);
     let lp = loop_points();
-    for k in (0..lp.len() - 1).step_by(2) {
-        let (a, b) = (lp[k], lp[(k + 2).min(lp.len() - 1)]);
+    for k in 0..lp.len() - 1 {
+        let (a, b) = (lp[k], lp[k + 1]);
         list.soft(f.at(a.0, a.1) + off, f.at(b.0, b.1) + off, 3.0 * s, col, soft);
     }
 }
