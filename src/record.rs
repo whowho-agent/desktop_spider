@@ -41,6 +41,7 @@ pub fn run(args: &[String]) -> Result<(), String> {
 
     let (pw, ph) = ((W as f64 * SCALE) as u32, (H as f64 * SCALE) as u32);
     let mut renderer = Renderer::headless(pw, ph, SCALE);
+    renderer.set_lighting(LightSide::Left.dir(), 0.5);
     let mut file = std::fs::File::create(out).map_err(|e| format!("{out}: {e}"))?;
     let mut list = DrawList::default();
 

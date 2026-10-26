@@ -1,4 +1,4 @@
-//! Иконка в меню-баре (macOS) / трее (Windows): режим, плеть (цвет, хоткей), пресет, пауза,
+//! Иконка в меню-баре (macOS) / трее (Windows): режим, плеть (кожа, свет, блик, размер, хоткей), пресет, пауза,
 //! отладка, выход; счёт игры в заголовке (macOS) / подсказке (Windows).
 //!
 //! События меню приходят из muda через `MenuEvent::set_event_handler`
@@ -11,7 +11,7 @@ use tray_icon::menu::accelerator::{Code, Modifiers};
 use tray_icon::menu::{CheckMenuItem, Menu, MenuEvent, MenuItem, PredefinedMenuItem, Submenu};
 use tray_icon::{Icon, TrayIcon, TrayIconBuilder};
 
-use crate::settings::{Hotkey, Mode, Settings, WhipSkin, WHIP_SIZES};
+use crate::settings::{Hotkey, Leather, LightSide, Mode, Settings, WHIP_GLOSS, WHIP_SIZES};
 use std::cell::Cell;
 
 /// Готовые сочетания хоткея в меню: ⌃⌥, ⌃⇧, ⌥⇧, ⌃⌥⇧.
@@ -32,8 +32,12 @@ pub enum TrayAction {
     Quit,
     /// Режим: паук / игра / просто плеть.
     Mode(crate::settings::Mode),
-    /// Цвет плети.
-    Skin(crate::settings::WhipSkin),
+    /// Тон кожи плети (только готовые; свой цвет — в config.toml).
+    Leather(crate::settings::Leather),
+    /// Сторона света.
+    Light(crate::settings::LightSide),
+    /// Сила блика 0..1.
+    Gloss(f32),
     /// Размер плети (множитель).
     Size(f32),
     /// Хоткей плети (из списка готовых сочетаний).
@@ -50,8 +54,15 @@ pub struct Tray {
     quit: MenuItem,
     /// Радиогруппа режимов.
     modes: Vec<(Mode, CheckMenuItem)>,
-    /// Радиогруппа цветов плети.
-    skins: Vec<(WhipSkin, CheckMenuItem)>,
+    /// Радиогруппа тонов кожи.
+    leather_menu: Submenu,
+    leathers: Vec<(Leather, CheckMenuItem)>,
+    /// «Свой #rrggbb (config.toml)» — неактивный пункт с галочкой, только для `Leather::Custom`.
+    custom_leather: CheckMenuItem,
+    custom_leather_shown: Cell<bool>,
+    lights: Vec<(LightSide, CheckMenuItem)>,
+    /// Радиогруппа блика; значение не из списка — ни один не отмечен.
+    glosses: Vec<(f32, CheckMenuItem)>,
     /// Радиогруппа размеров; если размер из config.toml не из списка — ни один не отмечен.
     sizes: Vec<(f32, CheckMenuItem)>,
     hotkey_menu: Submenu,
@@ -84,12 +95,34 @@ impl Tray {
             mode_menu.append(item).map_err(|e| e.to_string())?;
         }
 
-        // Плеть: цвет + подменю хоткея.
+        // Плеть: подменю кожи, света, блика, размера и хоткея.
         let whip_menu = Submenu::new("Плеть", true);
-        let skins: Vec<(WhipSkin, CheckMenuItem)> = [(WhipSkin::Light, "Светлая"), (WhipSkin::Black, "Чёрная")]
+        let leather_menu = Submenu::new("Кожа", true);
+        let leathers: Vec<(Leather, CheckMenuItem)> = Leather::PRESETS
             .into_iter()
-            .map(|(k, t)| (k, CheckMenuItem::new(t, true, k == WhipSkin::default(), None)))
+            .map(|l| (l, CheckMenuItem::new(l.label(), true, l == Leather::default(), None)))
             .collect();
+        for (_, item) in &leathers {
+            leather_menu.append(item).map_err(|e| e.to_string())?;
+        }
+        // Вставляется в конец только для своего цвета (см. set_settings).
+        let custom_leather = CheckMenuItem::new("Свой", false, true, None);
+        let light_menu = Submenu::new("Свет", true);
+        let lights: Vec<(LightSide, CheckMenuItem)> = [LightSide::Left, LightSide::Right]
+            .into_iter()
+            .map(|l| (l, CheckMenuItem::new(l.label(), true, l == LightSide::default(), None)))
+            .collect();
+        for (_, item) in &lights {
+            light_menu.append(item).map_err(|e| e.to_string())?;
+        }
+        let gloss_menu = Submenu::new("Блик", true);
+        let glosses: Vec<(f32, CheckMenuItem)> = WHIP_GLOSS
+            .iter()
+            .map(|&(v, t)| (v, CheckMenuItem::new(t, true, v == 0.5, None)))
+            .collect();
+        for (_, item) in &glosses {
+            gloss_menu.append(item).map_err(|e| e.to_string())?;
+        }
         let size_menu = Submenu::new("Размер", true);
         let sizes: Vec<(f32, CheckMenuItem)> = WHIP_SIZES
             .iter()
@@ -120,11 +153,8 @@ impl Tray {
                 &MenuItem::new("Изменить: config.toml", false, None),
             ])
             .map_err(|e| e.to_string())?;
-        for (_, item) in &skins {
-            whip_menu.append(item).map_err(|e| e.to_string())?;
-        }
         whip_menu
-            .append_items(&[&PredefinedMenuItem::separator(), &size_menu, &hotkey_menu])
+            .append_items(&[&leather_menu, &light_menu, &gloss_menu, &size_menu, &hotkey_menu])
             .map_err(|e| e.to_string())?;
 
         let menu = Menu::new();
@@ -161,7 +191,12 @@ impl Tray {
             reload,
             quit,
             modes,
-            skins,
+            leather_menu,
+            leathers,
+            custom_leather,
+            custom_leather_shown: Cell::new(false),
+            lights,
+            glosses,
             sizes,
             hotkey_menu,
             hotkeys,
@@ -220,8 +255,20 @@ impl Tray {
         if let Some(m) = pick(&self.modes, id) {
             return Some(TrayAction::Mode(m));
         }
-        if let Some(k) = pick(&self.skins, id) {
-            return Some(TrayAction::Skin(k));
+        if let Some(l) = pick(&self.leathers, id) {
+            self.show_custom_leather(None);
+            return Some(TrayAction::Leather(l));
+        }
+        if id == self.custom_leather.id() {
+            // Неактивный пункт; на всякий случай вернуть галочку.
+            self.custom_leather.set_checked(true);
+            return None;
+        }
+        if let Some(l) = pick(&self.lights, id) {
+            return Some(TrayAction::Light(l));
+        }
+        if let Some(v) = pick(&self.glosses, id) {
+            return Some(TrayAction::Gloss(v));
         }
         if let Some(v) = pick(&self.sizes, id) {
             return Some(TrayAction::Size(v));
@@ -319,14 +366,24 @@ fn pick<T: Clone>(group: &[(T, CheckMenuItem)], id: &tray_icon::menu::MenuId) ->
 }
 
 impl Tray {
-    /// Отметить текущие режим, цвет и хоткей в меню. Вызывать сразу после `new`
+    /// Отметить текущие режим, кожу, свет, блик, размер и хоткей в меню. Вызывать сразу после `new`
     /// и после каждого изменения настроек.
     pub fn set_settings(&self, s: &Settings) {
         for (m, item) in &self.modes {
             item.set_checked(*m == s.mode);
         }
-        for (k, item) in &self.skins {
-            item.set_checked(*k == s.whip_skin);
+        for (l, item) in &self.leathers {
+            item.set_checked(*l == s.whip_leather);
+        }
+        self.show_custom_leather(match s.whip_leather {
+            Leather::Custom(_) => Some(s.whip_leather),
+            _ => None,
+        });
+        for (l, item) in &self.lights {
+            item.set_checked(*l == s.whip_light);
+        }
+        for (v, item) in &self.glosses {
+            item.set_checked((*v - s.whip_gloss).abs() < 1e-3);
         }
         for (v, item) in &self.sizes {
             item.set_checked((*v - s.whip_size).abs() < 1e-3);
@@ -337,6 +394,26 @@ impl Tray {
             known |= *h == s.whip_hotkey;
         }
         self.show_custom_hotkey((!known).then_some(&s.whip_hotkey));
+    }
+
+    /// Показать «Свой #rrggbb (config.toml)» после готовых тонов или убрать (`None`).
+    fn show_custom_leather(&self, l: Option<Leather>) {
+        match l {
+            Some(l) => {
+                self.custom_leather.set_text(format!("{} (config.toml)", l.label()));
+                self.custom_leather.set_checked(true);
+                if !self.custom_leather_shown.get() {
+                    let _ = self.leather_menu.append(&self.custom_leather);
+                    self.custom_leather_shown.set(true);
+                }
+            }
+            None => {
+                if self.custom_leather_shown.get() {
+                    let _ = self.leather_menu.remove(&self.custom_leather);
+                    self.custom_leather_shown.set(false);
+                }
+            }
+        }
     }
 
     /// Показать «Своё: <хоткей> (config.toml)» после пресетов или убрать (`None`).

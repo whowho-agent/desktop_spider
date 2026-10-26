@@ -10,6 +10,7 @@
 //! - `Hotkey::parse("ctrl+alt")` / `Display` — формат `ctrl+alt+shift+cmd+<клавиша>`, регистр не важен;
 //!   на Windows `cmd` = клавиша Win.
 
+use std::borrow::Cow;
 use std::fmt;
 use std::path::{Path, PathBuf};
 
@@ -44,31 +45,6 @@ impl Mode {
     }
 }
 
-/// Цвет плети.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
-pub enum WhipSkin {
-    #[default]
-    Light,
-    Black,
-}
-
-impl WhipSkin {
-    pub fn as_str(self) -> &'static str {
-        match self {
-            WhipSkin::Light => "light",
-            WhipSkin::Black => "black",
-        }
-    }
-
-    pub fn parse(s: &str) -> Option<Self> {
-        match s.trim().to_ascii_lowercase().as_str() {
-            "light" => Some(WhipSkin::Light),
-            "black" => Some(WhipSkin::Black),
-            _ => None,
-        }
-    }
-}
-
 /// Тон кожи плети. Палитра строится из базового цвета (`whip::skin::palette`).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
 pub enum Leather {
@@ -94,6 +70,60 @@ impl Leather {
             Leather::Custom(c) => c,
         }
     }
+
+    /// Готовые тона для меню.
+    pub const PRESETS: [Leather; 5] =
+        [Leather::Natural, Leather::Cognac, Leather::Chocolate, Leather::Burgundy, Leather::Black];
+
+    /// Значение для config.toml: имя или `#rrggbb`.
+    pub fn as_str(self) -> Cow<'static, str> {
+        match self {
+            Leather::Natural => "natural".into(),
+            Leather::Cognac => "cognac".into(),
+            Leather::Chocolate => "chocolate".into(),
+            Leather::Burgundy => "burgundy".into(),
+            Leather::Black => "black".into(),
+            Leather::Custom([r, g, b]) => format!("#{r:02x}{g:02x}{b:02x}").into(),
+        }
+    }
+
+    /// Имя или `#rrggbb`, регистр не важен.
+    pub fn parse(s: &str) -> Option<Self> {
+        let s = s.trim().to_ascii_lowercase();
+        Some(match s.as_str() {
+            "natural" => Leather::Natural,
+            "cognac" => Leather::Cognac,
+            "chocolate" => Leather::Chocolate,
+            "burgundy" => Leather::Burgundy,
+            "black" => Leather::Black,
+            _ => {
+                let hex = s.strip_prefix('#')?;
+                if hex.len() != 6 || !hex.bytes().all(|b| b.is_ascii_hexdigit()) {
+                    return None;
+                }
+                let byte = |i: usize| u8::from_str_radix(&hex[i..i + 2], 16).ok();
+                Leather::Custom([byte(0)?, byte(2)?, byte(4)?])
+            }
+        })
+    }
+
+    /// Подпись для меню.
+    pub fn label(self) -> Cow<'static, str> {
+        match self {
+            Leather::Natural => "Натуральная".into(),
+            Leather::Cognac => "Коньячная".into(),
+            Leather::Chocolate => "Шоколадная".into(),
+            Leather::Burgundy => "Бордовая".into(),
+            Leather::Black => "Чёрная".into(),
+            Leather::Custom(_) => format!("Свой {}", self.as_str()).into(),
+        }
+    }
+}
+
+impl fmt::Display for Leather {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(&self.as_str())
+    }
 }
 
 /// Сторона источника света: блик сильнее с этой стороны, тень — в противоположную.
@@ -109,6 +139,29 @@ impl LightSide {
     pub fn dir(self) -> glam::Vec2 {
         let x = if self == LightSide::Right { 0.45 } else { -0.45 };
         glam::Vec2::new(x, -0.89).normalize()
+    }
+
+    pub fn as_str(self) -> &'static str {
+        match self {
+            LightSide::Left => "left",
+            LightSide::Right => "right",
+        }
+    }
+
+    pub fn parse(s: &str) -> Option<Self> {
+        match s.trim().to_ascii_lowercase().as_str() {
+            "left" => Some(LightSide::Left),
+            "right" => Some(LightSide::Right),
+            _ => None,
+        }
+    }
+
+    /// Подпись для меню.
+    pub fn label(self) -> &'static str {
+        match self {
+            LightSide::Left => "Сверху слева",
+            LightSide::Right => "Сверху справа",
+        }
     }
 }
 
@@ -260,14 +313,16 @@ pub const WHIP_SIZE_MIN: f32 = 0.5;
 pub const WHIP_SIZE_MAX: f32 = 3.0;
 /// Готовые размеры для меню.
 pub const WHIP_SIZES: [(f32, &str); 4] = [(0.7, "Маленькая"), (1.0, "Средняя"), (1.4, "Большая"), (2.0, "Огромная")];
+/// Сила блика для меню.
+pub const WHIP_GLOSS: [(f32, &str); 5] =
+    [(0.0, "Матовый"), (0.25, "Слабый"), (0.5, "Средний"), (0.75, "Сильный"), (1.0, "Лак")];
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Settings {
     pub mode: Mode,
-    pub whip_skin: WhipSkin,
     /// Множитель размера плети, `WHIP_SIZE_MIN..=WHIP_SIZE_MAX`.
     pub whip_size: f32,
-    /// Тон кожи (заменит `whip_skin`; старый ключ читается как natural / black).
+    /// Тон кожи (старый ключ `whip_skin` читается как natural / black).
     pub whip_leather: Leather,
     pub whip_light: LightSide,
     /// Сила блика 0..1 (0,5 — средний).
@@ -281,7 +336,6 @@ impl Default for Settings {
     fn default() -> Self {
         Self {
             mode: Mode::default(),
-            whip_skin: WhipSkin::default(),
             whip_size: 1.0,
             whip_leather: Leather::default(),
             whip_light: LightSide::default(),
@@ -296,8 +350,10 @@ impl Default for Settings {
 #[derive(serde::Serialize)]
 struct RawOut<'a> {
     mode: &'a str,
-    whip_skin: &'a str,
     whip_size: f32,
+    whip_leather: String,
+    whip_light: &'a str,
+    whip_gloss: f32,
     whip_hotkey: String,
     preset: &'a str,
 }
@@ -346,18 +402,26 @@ impl Settings {
                 return s;
             }
         };
+        // Старый `whip_skin` — только если нет `whip_leather`.
+        let mut legacy_leather = None;
+        let mut leather_seen = false;
         for (k, v) in &table {
-            // Единственное числовое поле; остальные — строки.
-            if k == "whip_size" {
+            // Числовые поля; остальные — строки.
+            if k == "whip_size" || k == "whip_gloss" {
+                let (min, max, dst) = if k == "whip_size" {
+                    (WHIP_SIZE_MIN, WHIP_SIZE_MAX, &mut s.whip_size)
+                } else {
+                    (0.0, 1.0, &mut s.whip_gloss)
+                };
                 match v.as_float().or_else(|| v.as_integer().map(|i| i as f64)) {
-                    Some(x) => {
+                    Some(x) if !x.is_nan() => {
                         let x = x as f32;
-                        s.whip_size = x.clamp(WHIP_SIZE_MIN, WHIP_SIZE_MAX);
-                        if s.whip_size != x {
-                            eprintln!("settings: {origin}: whip_size = {x} вне {WHIP_SIZE_MIN}..{WHIP_SIZE_MAX}, беру {}", s.whip_size);
+                        *dst = x.clamp(min, max);
+                        if *dst != x {
+                            eprintln!("settings: {origin}: {k} = {x} вне {min}..{max}, беру {dst}");
                         }
                     }
-                    None => eprintln!("settings: {origin}: whip_size должен быть числом, игнорирую"),
+                    _ => eprintln!("settings: {origin}: {k} должен быть числом, игнорирую"),
                 }
                 continue;
             }
@@ -370,9 +434,24 @@ impl Settings {
                     Some(m) => s.mode = m,
                     None => eprintln!("settings: {origin}: mode = {val:?} — ожидаю spider|game|whip"),
                 },
-                "whip_skin" => match WhipSkin::parse(val) {
-                    Some(m) => s.whip_skin = m,
-                    None => eprintln!("settings: {origin}: whip_skin = {val:?} — ожидаю light|black"),
+                "whip_leather" => {
+                    leather_seen = true;
+                    match Leather::parse(val) {
+                        Some(l) => s.whip_leather = l,
+                        None => eprintln!(
+                            "settings: {origin}: whip_leather = {val:?} — ожидаю natural|cognac|chocolate|burgundy|black|#rrggbb"
+                        ),
+                    }
+                }
+                "whip_light" => match LightSide::parse(val) {
+                    Some(l) => s.whip_light = l,
+                    None => eprintln!("settings: {origin}: whip_light = {val:?} — ожидаю left|right"),
+                },
+                // Устаревший ключ v1.
+                "whip_skin" => match val.trim().to_ascii_lowercase().as_str() {
+                    "light" => legacy_leather = Some(Leather::Natural),
+                    "black" => legacy_leather = Some(Leather::Black),
+                    _ => eprintln!("settings: {origin}: whip_skin = {val:?} — ожидаю light|black"),
                 },
                 "whip_hotkey" => match Hotkey::parse(val) {
                     Ok(h) => s.whip_hotkey = h,
@@ -382,14 +461,19 @@ impl Settings {
                 _ => eprintln!("settings: {origin}: неизвестный ключ {k:?}, игнорирую"),
             }
         }
+        if let (Some(l), false) = (legacy_leather, leather_seen) {
+            s.whip_leather = l;
+        }
         s
     }
 
     pub fn to_toml(&self) -> String {
         let raw = RawOut {
             mode: self.mode.as_str(),
-            whip_skin: self.whip_skin.as_str(),
             whip_size: self.whip_size,
+            whip_leather: self.whip_leather.as_str().into_owned(),
+            whip_light: self.whip_light.as_str(),
+            whip_gloss: self.whip_gloss,
             whip_hotkey: self.whip_hotkey.to_string(),
             preset: &self.preset,
         };
@@ -445,11 +529,10 @@ mod tests {
     fn roundtrip() {
         let s = Settings {
             mode: Mode::Game,
-            whip_skin: WhipSkin::Black,
             whip_size: 1.4,
-            whip_leather: Leather::default(),
-            whip_light: LightSide::default(),
-            whip_gloss: 0.5,
+            whip_leather: Leather::Burgundy,
+            whip_light: LightSide::Right,
+            whip_gloss: 0.75,
             whip_hotkey: Hotkey::parse("shift+cmd+F13").unwrap(),
             preset: "tarantula".into(),
         };
@@ -458,7 +541,7 @@ mod tests {
         s.save_to(&p).unwrap();
         assert_eq!(Settings::load_from(&p), s);
         // Перезапись поверх существующего файла.
-        let s2 = Settings { mode: Mode::Whip, ..s };
+        let s2 = Settings { mode: Mode::Whip, whip_leather: Leather::Custom([0x12, 0xab, 0xff]), ..s };
         s2.save_to(&p).unwrap();
         assert_eq!(Settings::load_from(&p), s2);
         assert!(!dir.join("sub/config.toml.tmp").exists());
@@ -473,8 +556,8 @@ mod tests {
 
     #[test]
     fn partial_file() {
-        let s = Settings::from_toml("whip_skin = \"black\"\n", "test");
-        assert_eq!(s, Settings { whip_skin: WhipSkin::Black, ..Settings::default() });
+        let s = Settings::from_toml("whip_light = \"right\"\n", "test");
+        assert_eq!(s, Settings { whip_light: LightSide::Right, ..Settings::default() });
     }
 
     #[test]
@@ -482,6 +565,9 @@ mod tests {
         let text = r#"
             mode = "dance"
             whip_skin = 5
+            whip_leather = "plaid"
+            whip_light = "up"
+            whip_gloss = "shiny"
             whip_hotkey = "ctrl+ctrl"
             preset = "big"
             unknown = "x"
@@ -559,5 +645,55 @@ mod tests {
         assert_eq!(Settings::from_toml("whip_size = 9.0\n", "t").whip_size, WHIP_SIZE_MAX);
         assert_eq!(Settings::from_toml("whip_size = 0.1\n", "t").whip_size, WHIP_SIZE_MIN);
         assert_eq!(Settings::from_toml("whip_size = \"big\"\n", "t").whip_size, 1.0);
+    }
+
+    #[test]
+    fn legacy_whip_skin() {
+        let l = |t: &str| Settings::from_toml(t, "t").whip_leather;
+        assert_eq!(l("whip_skin = \"light\""), Leather::Natural);
+        assert_eq!(l("whip_skin = \"BLACK\""), Leather::Black);
+        assert_eq!(l("whip_skin = \"pink\""), Leather::Natural);
+        // whip_leather важнее, независимо от порядка ключей.
+        assert_eq!(l("whip_skin = \"black\"\nwhip_leather = \"cognac\""), Leather::Cognac);
+        assert_eq!(l("whip_leather = \"cognac\"\nwhip_skin = \"black\""), Leather::Cognac);
+        // Плохой whip_leather — тоже не подменяется старым ключом.
+        assert_eq!(l("whip_leather = \"x\"\nwhip_skin = \"black\""), Leather::Natural);
+        // При записи старый ключ не появляется.
+        let out = Settings::from_toml("whip_skin = \"black\"", "t").to_toml();
+        assert!(!out.contains("whip_skin") && out.contains("whip_leather = \"black\""), "{out}");
+    }
+
+    #[test]
+    fn leather_parse_and_custom() {
+        for l in Leather::PRESETS {
+            assert_eq!(Leather::parse(&l.as_str()), Some(l));
+        }
+        assert_eq!(Leather::parse(" Cognac "), Some(Leather::Cognac));
+        let c = Leather::parse("#A1b2C3").unwrap();
+        assert_eq!(c, Leather::Custom([0xa1, 0xb2, 0xc3]));
+        assert_eq!(c.as_str(), "#a1b2c3");
+        assert_eq!(c.label(), "Свой #a1b2c3");
+        assert_eq!(c.rgb(), [0xa1, 0xb2, 0xc3]);
+        assert_eq!(Leather::Burgundy.label(), "Бордовая");
+        for bad in ["#abc", "#abcdefg", "abcdef", "#gg0000", "#+1+2+3", ""] {
+            assert_eq!(Leather::parse(bad), None, "{bad}");
+        }
+        let s = Settings::from_toml("whip_leather = \"#102030\"", "t");
+        assert_eq!(s.whip_leather, Leather::Custom([0x10, 0x20, 0x30]));
+        assert_eq!(Settings::from_toml(&s.to_toml(), "t"), s);
+        assert_eq!(LightSide::parse("RIGHT"), Some(LightSide::Right));
+        assert_eq!(LightSide::Left.label(), "Сверху слева");
+    }
+
+    #[test]
+    fn whip_gloss_parse_and_clamp() {
+        let g = |t: &str| Settings::from_toml(t, "t").whip_gloss;
+        assert_eq!(g("whip_gloss = 0.25"), 0.25);
+        assert_eq!(g("whip_gloss = 1"), 1.0);
+        assert_eq!(g("whip_gloss = 0"), 0.0);
+        assert_eq!(g("whip_gloss = 1.5"), 1.0);
+        assert_eq!(g("whip_gloss = -2"), 0.0);
+        assert_eq!(g("whip_gloss = nan"), 0.5);
+        assert_eq!(g("whip_gloss = \"high\""), 0.5);
     }
 }

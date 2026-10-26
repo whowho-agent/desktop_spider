@@ -122,7 +122,8 @@ impl ApplicationHandler<UserEvent> for App {
             settings,
             input: WhipInput::default(),
         });
-        if let Some(s) = self.state.as_ref() {
+        if let Some(s) = self.state.as_mut() {
+            s.apply_lighting();
             s.show_score();
         }
     }
@@ -186,11 +187,20 @@ impl ApplicationHandler<UserEvent> for App {
                 s.last_move = s.last;
             }
             TrayAction::Mode(m) => s.set_mode(m),
-            TrayAction::Skin(skin) => {
-                // Временно (до нового меню): светлая/чёрная → натуральная/чёрная кожа.
-                s.settings.whip_skin = skin;
-                s.settings.whip_leather = if skin == crate::settings::WhipSkin::Black { crate::settings::Leather::Black } else { crate::settings::Leather::Natural };
-                s.world.set_leather(s.settings.whip_leather);
+            TrayAction::Leather(l) => {
+                s.settings.whip_leather = l;
+                s.world.set_leather(l);
+                s.save_settings();
+            }
+            TrayAction::Light(l) => {
+                s.settings.whip_light = l;
+                s.world.light = l;
+                s.apply_lighting();
+                s.save_settings();
+            }
+            TrayAction::Gloss(g) => {
+                s.settings.whip_gloss = g;
+                s.apply_lighting();
                 s.save_settings();
             }
             TrayAction::Size(v) => {
@@ -326,6 +336,11 @@ impl State {
         self.last_move = Instant::now();
         self.save_settings();
         self.show_score();
+    }
+
+    /// Сторона света и сила блика — в шейдер (объёмная плеть v2).
+    fn apply_lighting(&mut self) {
+        self.renderer.set_lighting(self.settings.whip_light.dir(), self.settings.whip_gloss);
     }
 
     fn save_settings(&self) {

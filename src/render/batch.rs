@@ -65,9 +65,13 @@ impl DrawList {
         self.push_styled(a, b, width * 0.5, color, kind::TUBE, 0.0);
     }
 
-    /// Плетёная трубка: пряди с шагом `period` pt вдоль оси.
+    /// Плетёная трубка: пряди с шагом около `period` pt вдоль оси. Шаг подгоняется так, чтобы
+    /// в отрезок укладывалось целое число прядей: узор отсчитывается от `a`, и тогда соседние
+    /// отрезки хлыста стыкуются без швов.
     pub fn braid(&mut self, a: Vec2, b: Vec2, width: f32, color: [f32; 4], period: f32) {
-        self.push_styled(a, b, width * 0.5, color, kind::BRAID, period);
+        let len = a.distance(b);
+        let fitted = if len > 1e-3 && period > 0.0 { len / (len / period).round().max(1.0) } else { period };
+        self.push_styled(a, b, width * 0.5, color, kind::BRAID, fitted);
     }
 
     /// Металлическая трубка (кольца, навершие сбоку).
@@ -75,9 +79,14 @@ impl DrawList {
         self.push_styled(a, b, width * 0.5, color, kind::METAL, 0.0);
     }
 
-    /// Объёмная сфера с бликом к свету.
+    /// Металлическая сфера с бликом к свету (навершие).
     pub fn sphere(&mut self, c: Vec2, radius: f32, color: [f32; 4]) {
         self.push_styled(c, c, radius, color, kind::SPHERE, 0.0);
+    }
+
+    /// Матовая кожаная сфера (узлы): параметр 1 — без металлического блика.
+    pub fn leather_sphere(&mut self, c: Vec2, radius: f32, color: [f32; 4]) {
+        self.push_styled(c, c, radius, color, kind::SPHERE, 1.0);
     }
 
     /// Мягкая тень: капсула толщиной `width`, край размыт на `softness` pt.

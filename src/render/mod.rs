@@ -2,5 +2,7 @@
 mod batch;
 mod renderer;
 
-pub use batch::{kind, DrawList, Shape};
+pub use batch::{DrawList, Shape};
+#[cfg(test)]
+pub use batch::kind;
 pub use renderer::Renderer;

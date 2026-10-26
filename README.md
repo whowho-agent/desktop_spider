@@ -37,7 +37,13 @@ Rust + wgpu, прозрачное окно поверх всего, клики �
 
 Пока хоткей зажат, клики достаются плети, а не окнам под ней. На macOS первый клик ненадолго делает активным приложение паука — фокус возвращается, когда отпускаете хоткей.
 
-В меню **Плеть**: цвет (светлая / чёрная), размер (×0.7 – ×2), хоткей.
+В меню **Плеть**:
+- **Кожа** — натуральная, коньячная, шоколадная, бордовая, чёрная или свой цвет (`#rrggbb` в `config.toml`);
+- **Свет** — сверху слева или справа: с этой стороны блик сильнее, тень падает в противоположную;
+- **Блик** — от матового до лака;
+- **Размер** (×0.7 – ×2) и **хоткей**.
+
+Плеть объёмная: плетёный хлыст с бликом, рукоять с ромбовой оплёткой, металлическое навершие, темляк, мягкая тень.
 
 ## Установка
 
@@ -55,7 +61,9 @@ Rust + wgpu, прозрачное окно поверх всего, клики �
 macOS: `~/Library/Application Support/DesktopSpider/config.toml`, Windows: `%APPDATA%\DesktopSpider\config.toml`.
 
 ```toml
-whip_skin = "black"    # light | black
+whip_leather = "cognac"    # natural | cognac | chocolate | burgundy | black | "#rrggbb"
+whip_light = "left"        # left | right — сторона источника света
+whip_gloss = 0.5           # 0 (матовая) … 1 (лак)
 whip_size = 1.4        # 0.5 – 3
 whip_hotkey = "ctrl+alt"   # модификаторы ctrl/alt/shift/cmd (+ клавиша, например "ctrl+alt+w")
 preset = "spider"
@@ -83,4 +91,4 @@ cargo run --release
 - `src/platform` — прозрачное окно поверх всего, курсор, хоткей, захват мыши (macOS / Windows).
 - `src/world.rs` — общий для приложения и записи гифок мир: режим, паук, плеть, счёт.
 
-Подробности и история решений — в [`PLAN.md`](PLAN.md), эскиз плети — [`design/whip_demo.html`](design/whip_demo.html).
+Подробности и история решений — в [`PLAN.md`](PLAN.md), эскизы плети — [`design/whip_v2.html`](design/whip_v2.html) (текущая) и [`design/whip_demo.html`](design/whip_demo.html) (v1, физика и анимация).
