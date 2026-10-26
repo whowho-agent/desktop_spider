@@ -44,7 +44,7 @@ Rust + wgpu, прозрачное окно поверх всего, клики �
 Готовые сборки — на странице [релизов](https://github.com/whowho-agent/desktop_spider/releases):
 
 - **macOS (Apple Silicon, 13+)** — `DesktopSpider-macos-arm64.zip`, перенесите `DesktopSpider.app` в «Программы». Сборка без подписи разработчика: при первом запуске правый клик → «Открыть», или
-  `xattr -dr com.apple.quarantine /Applications/DesktopSpider.app`.
+  `/usr/bin/xattr -dr com.apple.quarantine /Applications/DesktopSpider.app`.
 - **Windows 10/11 (x64)** — `DesktopSpider-windows-x64.zip`, распакуйте и запустите `desktop_spider.exe` (из архива не запускайте — рядом должна лежать папка `presets`). SmartScreen может предупредить о неизвестном издателе: «Подробнее» → «Выполнить в любом случае».
 
 Системные разрешения не нужны.

@@ -69,7 +69,7 @@ jobs:
 
             **macOS (Apple Silicon, 13+):** распакуйте `DesktopSpider-macos-arm64.zip`, перенесите `DesktopSpider.app` в «Программы».
             Сборка подписана ad-hoc, поэтому при первом запуске: правый клик → «Открыть», или
-            `xattr -dr com.apple.quarantine /Applications/DesktopSpider.app`.
+            `/usr/bin/xattr -dr com.apple.quarantine /Applications/DesktopSpider.app`.
 
             **Windows 10/11 (x64):** распакуйте `DesktopSpider-windows-x64.zip` и запустите `desktop_spider.exe`.
             SmartScreen может предупредить о неизвестном издателе: «Подробнее» → «Выполнить в любом случае».
