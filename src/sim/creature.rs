@@ -61,6 +61,8 @@ enum Mode {
 
 pub struct Creature {
     preset: Preset,
+    /// Край экрана (из `keep_inside`); `None` — без ограничений.
+    bounds: Option<(Vec2, Vec2)>,
     body: Body,
     legs: Vec<Leg>,
     /// Буфер порядка шагов для `plan_steps` (без аллокаций в тике).
@@ -116,6 +118,7 @@ impl Creature {
             dodge_t: 0.0,
             dodge_dir: Vec2::ZERO,
             dodge_cd: 0.0,
+            bounds: None,
             flash: 0.0,
             wiggle: 0.0,
             hold: None,
@@ -137,6 +140,22 @@ impl Creature {
     /// Центр тела.
     pub fn position(&self) -> Vec2 {
         self.body.pos
+    }
+
+    /// Не выпускать тело за прямоугольник `min..max` (край экрана): позиция прижимается к краю,
+    /// скорость наружу гасится. Ноги догоняют сами (перешагивают, если ступня вне досягаемости).
+    pub fn keep_inside(&mut self, min: Vec2, max: Vec2) {
+        // Запоминаем: в «Игре» цель на кольце и уворот выбираются внутри этих границ.
+        self.bounds = Some((min, max.max(min)));
+        let b = &mut self.body;
+        let clamped = b.pos.clamp(min, max.max(min));
+        if clamped.x != b.pos.x {
+            b.vel.x = 0.0;
+        }
+        if clamped.y != b.pos.y {
+            b.vel.y = 0.0;
+        }
+        b.pos = clamped;
     }
 
     /// Режим «Игра»: держать 250–400 pt от курсора и уворачиваться вместо погони.
@@ -230,7 +249,11 @@ impl Creature {
             if toward > DODGE_COS {
                 // Вбок от линии полёта, в ту сторону, где уже стоим.
                 let perp = Vec2::new(-cv.y, cv.x) / cs;
-                let side = if perp.dot(rel) >= 0.0 { 1.0 } else { -1.0 };
+                let mut side = if perp.dot(rel) >= 0.0 { 1.0 } else { -1.0 };
+                // У стены — уворачиваться в другую сторону.
+                if !self.inside(self.body.pos + perp * side * 120.0) {
+                    side = -side;
+                }
                 self.dodge_dir = perp * side;
                 self.dodge_t = DODGE_TIME;
                 self.dodge_cd = DODGE_TIME + DODGE_COOLDOWN;
@@ -251,13 +274,33 @@ impl Creature {
             self.goal_r = self.rand_range(GOAL_R);
             self.goal_timer = self.rand_range(GOAL_INTERVAL);
         }
-        let goal = target + Vec2::from_angle(self.goal_angle) * self.goal_r;
+        let mut goal = target + Vec2::from_angle(self.goal_angle) * self.goal_r;
+        if !self.inside(goal) {
+            // Точка кольца за краем экрана — ищем ближайшую по углу внутри, иначе прижимаем к краю.
+            let found = (1..=10)
+                .flat_map(|k| [k as f32, -(k as f32)])
+                .map(|k| self.goal_angle + k * 0.3)
+                .map(|a| (a, target + Vec2::from_angle(a) * self.goal_r))
+                .find(|&(_, g)| self.inside(g));
+            match found {
+                Some((a, g)) => {
+                    self.goal_angle = a;
+                    goal = g;
+                }
+                None => goal = self.bounds.map_or(goal, |(min, max)| goal.clamp(min, max)),
+            }
+        }
         let to = goal - self.body.pos;
         // Вне кольца — бегом, в кольце — прогулочным шагом.
         let urgency = 1.0 - smoothstep(RING_MIN - 60.0, RING_MIN, d) + smoothstep(RING_MAX, RING_MAX + 150.0, d);
         let speed = max_speed * (GAME_CRUISE + (1.0 - GAME_CRUISE) * urgency.min(1.0));
         let desired = to.normalize_or_zero() * speed * smoothstep(4.0, 90.0, to.length());
         (desired, max_accel)
+    }
+
+    /// Внутри ли границ экрана (без границ — всегда да).
+    fn inside(&self, p: Vec2) -> bool {
+        self.bounds.map_or(true, |(min, max)| p.cmpge(min).all() && p.cmple(max).all())
     }
 
     /// Фиксированный шаг симуляции. `target` — позиция курсора.

@@ -7,11 +7,13 @@ mod app;
 mod config;
 mod input;
 mod platform;
+mod record;
 mod render;
 mod settings;
 mod sim;
 mod tray;
 mod whip;
+mod world;
 
 use tray_icon::menu::MenuEvent;
 use winit::event_loop::EventLoop;
@@ -19,6 +21,15 @@ use winit::event_loop::EventLoop;
 use app::UserEvent;
 
 fn main() {
+    // Запись демо-роликов без окна (для README): `--record <spider|game|whip> <out.rgba>`.
+    let args: Vec<String> = std::env::args().skip(1).collect();
+    if args.first().map(String::as_str) == Some("--record") {
+        if let Err(e) = record::run(&args[1..]) {
+            eprintln!("{e}");
+            std::process::exit(2);
+        }
+        return;
+    }
     let mut builder = EventLoop::<UserEvent>::with_user_event();
     platform::configure_event_loop(&mut builder);
     let event_loop = builder.build().expect("event loop");

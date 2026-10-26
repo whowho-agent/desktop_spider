@@ -120,6 +120,15 @@ impl Whip {
         self.reset(cursor);
     }
 
+    /// Навести прицел на точку (для записи демо: как если бы мышь долго вели в её сторону).
+    /// Действует только в покое, до клика.
+    pub fn aim_at(&mut self, cursor: Vec2, point: Vec2) {
+        let d = point - cursor;
+        if d.length_squared() > 1.0 {
+            self.hand.aim = d.y.atan2(d.x);
+        }
+    }
+
     pub fn reset(&mut self, cursor: Vec2) {
         let cursor = cursor / self.scale;
         self.hand.set_ready();

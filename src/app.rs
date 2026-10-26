@@ -13,9 +13,8 @@ use crate::input::WhipInput;
 use crate::platform;
 use crate::render::{DrawList, Renderer};
 use crate::settings::{Mode, Settings};
-use crate::sim::Creature;
 use crate::tray::{Tray, TrayAction};
-use crate::whip::{Whip, WhipEvent};
+use crate::world::World;
 
 /// Шаг симуляции: 120 Гц, независимо от частоты кадров.
 const STEP: f32 = 1.0 / 120.0;
@@ -42,7 +41,7 @@ pub struct App {
 struct State {
     window: Arc<Window>,
     renderer: Renderer,
-    creature: Creature,
+    world: World,
     preset: Preset,
     /// Имя файла текущего пресета (ключ для перезагрузки).
     preset_name: String,
@@ -60,13 +59,8 @@ struct State {
     next_idle_tick: Instant,
 
     settings: Settings,
-    whip: Whip,
-    whip_events: Vec<WhipEvent>,
     /// Ввод плети: `held` — хоткей зажат (и режим не «Паук»), кнопки — из событий окна при захвате.
     input: WhipInput,
-    /// Счёт текущей сессии режима: попадания и удары.
-    hits: u32,
-    strikes: u32,
 }
 
 impl ApplicationHandler<UserEvent> for App {
@@ -93,10 +87,8 @@ impl ApplicationHandler<UserEvent> for App {
             p
         });
         let cursor = platform::cursor_position(&window);
-        let mut whip = Whip::new(cursor);
-        whip.set_scale(settings.whip_size, cursor);
-        let mut creature = Creature::new(&preset, cursor);
-        creature.set_game(settings.mode == Mode::Game);
+        let mut world = World::new(&preset, settings.mode, settings.whip_skin, settings.whip_size, cursor);
+        world.set_bounds(logical_size(&window));
         let debug = std::env::var_os("SPIDER_DEBUG").is_some();
 
         // Меню-бар / трей: только на главном потоке после старта цикла, т.е. здесь.
@@ -112,7 +104,7 @@ impl ApplicationHandler<UserEvent> for App {
         self.state = Some(State {
             window,
             renderer,
-            creature,
+            world,
             preset,
             preset_name: name,
             list: DrawList::default(),
@@ -126,11 +118,7 @@ impl ApplicationHandler<UserEvent> for App {
             last_move: now,
             next_idle_tick: now,
             settings,
-            whip,
-            whip_events: Vec::new(),
             input: WhipInput::default(),
-            hits: 0,
-            strikes: 0,
         });
         if let Some(s) = self.state.as_ref() {
             s.show_score();
@@ -141,7 +129,10 @@ impl ApplicationHandler<UserEvent> for App {
         let Some(s) = self.state.as_mut() else { return };
         match event {
             WindowEvent::CloseRequested => event_loop.exit(),
-            WindowEvent::Resized(size) => s.renderer.resize(size, s.window.scale_factor()),
+            WindowEvent::Resized(size) => {
+                s.renderer.resize(size, s.window.scale_factor());
+                s.world.set_bounds(logical_size(&s.window));
+            }
             WindowEvent::ScaleFactorChanged { scale_factor, mut inner_size_writer } => {
                 platform::on_scale_factor_changed(&s.window, &mut inner_size_writer);
                 s.renderer.resize(s.window.inner_size(), scale_factor)
@@ -195,11 +186,12 @@ impl ApplicationHandler<UserEvent> for App {
             TrayAction::Mode(m) => s.set_mode(m),
             TrayAction::Skin(skin) => {
                 s.settings.whip_skin = skin;
+                s.world.skin = skin;
                 s.save_settings();
             }
             TrayAction::Size(v) => {
                 s.settings.whip_size = v;
-                s.whip.set_scale(v, s.cursor);
+                s.world.whip.set_scale(v, s.cursor);
                 s.save_settings();
             }
             TrayAction::Hotkey(hk) => {
@@ -261,37 +253,24 @@ impl State {
         let cursor = self.cursor;
 
         self.poll_hotkey();
-        let mode = self.settings.mode;
 
         if !self.paused {
             // dt ограничен сверху, так что редкие idle-кадры не ломают аккумулятор.
             self.acc += (now - self.last).as_secs_f32().min(MAX_FRAME_DT);
+            let mut score_changed = false;
             while self.acc >= STEP {
-                if mode != Mode::Whip {
-                    self.creature.update(STEP, cursor);
-                }
-                if mode != Mode::Spider {
-                    let target = (mode == Mode::Game).then(|| self.creature.position());
-                    self.whip.update(STEP, cursor, self.input, target, &mut self.whip_events);
-                    self.handle_whip_events(cursor);
-                }
+                score_changed |= self.world.step(STEP, cursor, self.input);
                 self.acc -= STEP;
+            }
+            if score_changed {
+                self.show_score();
             }
         }
         self.last = now;
 
         self.list.clear();
-        // Кольцо остановки вокруг курсора — только в отладке, как цели ступней.
-        if self.debug && mode != Mode::Whip {
-            self.list.ring(cursor, self.preset.body.stop_radius, 1.0, self.preset.color_ring);
-        }
-        if mode != Mode::Whip {
-            self.creature.draw(&mut self.list, self.debug);
-        }
-        if mode != Mode::Spider {
-            // Плеть видна, пока зажат хоткей; эффекты (вспышки, следы) догорают и без него.
-            self.whip.draw(&mut self.list, self.settings.whip_skin, self.input.held);
-        }
+        // Плеть видна, пока зажат хоткей; эффекты (вспышки, следы) догорают и без него.
+        self.world.draw(&mut self.list, &self.preset, cursor, self.input.held, self.debug);
         self.renderer.render(&self.list);
     }
 
@@ -300,7 +279,7 @@ impl State {
         !self.paused
             && (now.duration_since(self.last_move) < IDLE_AFTER
                 || self.input.held
-                || (self.settings.mode != Mode::Spider && self.whip.is_animating()))
+                || self.world.whip_animating())
     }
 
     /// Опрашивает хоткей; на переходах включает/выключает захват мыши. Возвращает «только что зажали».
@@ -313,50 +292,18 @@ impl State {
         if !held {
             self.input.lmb = false;
             self.input.rmb = false;
-        } else if !self.whip.is_animating() {
-            self.whip.reset(self.cursor);
+        } else if !self.world.whip.is_animating() {
+            self.world.whip.reset(self.cursor);
         }
         platform::set_whip_capture(&self.window, held);
         held
-    }
-
-    fn handle_whip_events(&mut self, cursor: Vec2) {
-        let mode = self.settings.mode;
-        let mut score_changed = false;
-        for ev in self.whip_events.drain(..) {
-            match ev {
-                WhipEvent::Crack { pos, dir, big } => {
-                    self.strikes += 1;
-                    score_changed = true;
-                    match mode {
-                        Mode::Game => {
-                            if self.creature.strike(pos, big) {
-                                self.hits += 1;
-                            }
-                        }
-                        Mode::Whip => self.whip.fx_mut().welt(pos, dir, big),
-                        Mode::Spider => {}
-                    }
-                }
-                WhipEvent::Caught => {
-                    self.creature.grab();
-                    self.hits += 1;
-                    score_changed = true;
-                }
-                WhipEvent::Hold { pos } => self.creature.hold_at(pos),
-                WhipEvent::Released => self.creature.release(cursor),
-            }
-        }
-        if score_changed {
-            self.show_score();
-        }
     }
 
     /// Счёт у иконки меню-бара / в подсказке трея; только в режиме «Игра».
     fn show_score(&self) {
         let Some(t) = &self.tray else { return };
         if self.settings.mode == Mode::Game {
-            t.set_score(Some(&format!("{} / {}", self.hits, self.strikes)));
+            t.set_score(Some(&format!("{} / {}", self.world.hits, self.world.strikes)));
         } else {
             t.set_score(None);
         }
@@ -367,10 +314,7 @@ impl State {
             return;
         }
         self.settings.mode = mode;
-        self.creature.set_game(mode == Mode::Game);
-        self.whip.fx_mut().clear();
-        self.hits = 0;
-        self.strikes = 0;
+        self.world.set_mode(mode);
         if mode == Mode::Spider && self.input.held {
             self.input = WhipInput::default();
             platform::set_whip_capture(&self.window, false);
@@ -400,7 +344,7 @@ impl State {
         match config::load_preset(name) {
             Ok(p) => {
                 eprintln!("пресет загружен: {name}");
-                self.creature.set_preset(&p);
+                self.world.creature.set_preset(&p);
                 self.preset = p;
                 self.preset_name = name.to_string();
                 if self.settings.preset != name {
@@ -416,4 +360,10 @@ impl State {
             t.set_current(&self.preset_name);
         }
     }
+}
+
+/// Размер окна-оверлея в логических точках — поле, где живёт паук.
+fn logical_size(window: &Window) -> Vec2 {
+    let s = window.inner_size().to_logical::<f32>(window.scale_factor());
+    Vec2::new(s.width, s.height)
 }
