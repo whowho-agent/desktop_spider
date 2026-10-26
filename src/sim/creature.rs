@@ -40,6 +40,30 @@ impl Creature {
         *self = Self::with_body(preset, body);
     }
 
+    // --- Игра с плетью (реализует агент поведения, W2e; сейчас заглушки) ---
+
+    /// Центр тела.
+    pub fn position(&self) -> Vec2 {
+        self.body.pos
+    }
+
+    /// Режим «Игра»: держать 250–400 pt от курсора и уворачиваться вместо погони.
+    pub fn set_game(&mut self, _on: bool) {}
+
+    /// Щелчок плети в `pos`. Если близко (≈ 42 pt, `big` — 55) — оглушение 0,45 с, затем бегство. Возвращает попадание.
+    pub fn strike(&mut self, _pos: Vec2, _big: bool) -> bool {
+        false
+    }
+
+    /// Пойман захлёстом: ноги поджаты, тело ведёт `hold_at`.
+    pub fn grab(&mut self) {}
+
+    /// Пока пойман — тело ставится в `pos` каждый шаг.
+    pub fn hold_at(&mut self, _pos: Vec2) {}
+
+    /// Отпущен: удирает от `from` (курсор).
+    pub fn release(&mut self, _from: Vec2) {}
+
     /// Фиксированный шаг симуляции. `target` — позиция курсора.
     pub fn update(&mut self, dt: f32, target: Vec2) {
         let lp = &self.preset.legs;

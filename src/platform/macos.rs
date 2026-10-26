@@ -78,3 +78,15 @@ pub fn cursor_position(_window: &Window) -> Vec2 {
 
 /// На macOS размер окна в точках не меняется со сменой scale factor — winit всё делает сам.
 pub fn on_scale_factor_changed(_window: &Window, _writer: &mut InnerSizeWriter) {}
+
+// --- Плеть (реализует агент платформы, W0 + W2c; сейчас заглушки) ---
+
+/// Удерживается ли хоткей плети прямо сейчас. Опрос, без событий; вызывается каждый кадр.
+pub fn hotkey_held(_hotkey: &crate::settings::Hotkey) -> bool {
+    false
+}
+
+/// Режим плети: `on` — оверлей принимает клики (ЛКМ/ПКМ не доходят до приложений под ним),
+/// системный курсор скрыт, фокус активного приложения не отнимается (или возвращается при `false`).
+/// `off` — всё как было: клики насквозь, курсор виден.
+pub fn set_whip_capture(_window: &Window, _on: bool) {}

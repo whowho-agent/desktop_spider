@@ -151,6 +151,8 @@ impl ApplicationHandler<UserEvent> for App {
                 s.acc = 0.0;
                 s.last_move = s.last;
             }
+            // Подключаются на этапе W3.
+            TrayAction::Mode(_) | TrayAction::Skin(_) | TrayAction::Hotkey(_) => {}
             TrayAction::Debug(on) => {
                 s.debug = on;
                 if let Some(t) = &s.tray {

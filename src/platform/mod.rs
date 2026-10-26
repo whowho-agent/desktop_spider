@@ -12,6 +12,8 @@
 //! - Windows дополнительно: `Composition` — DirectComposition-визуал для прозрачной
 //!   wgpu-поверхности (см. `render::Renderer`).
 
+//! Плеть: `hotkey_held(&Hotkey)`, `set_whip_capture(&Window, on)` — см. комментарии в реализациях.
+
 #[cfg(target_os = "macos")]
 mod macos;
 #[cfg(target_os = "macos")]

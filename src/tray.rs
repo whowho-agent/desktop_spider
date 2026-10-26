@@ -18,6 +18,12 @@ pub enum TrayAction {
     Debug(bool),
     Reload,
     Quit,
+    /// Режим: паук / игра / просто плеть.
+    Mode(crate::settings::Mode),
+    /// Цвет плети.
+    Skin(crate::settings::WhipSkin),
+    /// Хоткей плети (из списка готовых сочетаний).
+    Hotkey(crate::settings::Hotkey),
 }
 
 pub struct Tray {
@@ -194,4 +200,13 @@ fn glyph_icon(outlined: bool) -> Icon {
         })
         .collect();
     Icon::from_rgba(rgba, N as u32, N as u32).expect("icon rgba")
+}
+
+// Контракт для агента настроек/меню (W2d); сейчас заглушки.
+impl Tray {
+    /// Отметить текущие режим, цвет и хоткей в меню.
+    pub fn set_settings(&self, _s: &crate::settings::Settings) {}
+
+    /// Счёт игры: заголовок у иконки (macOS) / подсказка (Windows). `None` — убрать.
+    pub fn set_score(&self, _text: Option<&str>) {}
 }

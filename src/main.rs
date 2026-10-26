@@ -5,10 +5,13 @@
 
 mod app;
 mod config;
+mod input;
 mod platform;
 mod render;
+mod settings;
 mod sim;
 mod tray;
+mod whip;
 
 use tray_icon::menu::MenuEvent;
 use winit::event_loop::EventLoop;
