@@ -1,0 +1,780 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Плеть — эскиз</title>
+<style>
+  :root {
+    --bg: #0b0b12;
+    --panel: #14141f;
+    --line: #26263a;
+    --text: #e8e8f0;
+    --muted: #9a9ab0;
+    --accent: #ffd36b;
+    --leather: #d89a5a;
+    --leather-dark: #2a1a10;
+    --lash: #c98a4c;
+    --braid: #f3cf9a;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font: 14px/1.5 -apple-system, "Segoe UI", system-ui, sans-serif;
+  }
+  main { max-width: 1100px; margin: 0 auto; padding: 24px 16px 48px; }
+  h1 { font-size: 22px; margin: 0 0 4px; }
+  h2 { font-size: 15px; margin: 0 0 10px; color: var(--accent); font-weight: 600; }
+  p.lead { color: var(--muted); margin: 0 0 20px; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 16px; margin-bottom: 16px; }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  @media (max-width: 820px) { .grid { grid-template-columns: 1fr; } }
+  svg { display: block; width: 100%; height: auto; }
+  #stage { background:
+      linear-gradient(var(--line) 1px, transparent 1px) 0 0 / 40px 40px,
+      linear-gradient(90deg, var(--line) 1px, transparent 1px) 0 0 / 40px 40px,
+      #07070c;
+    border-radius: 8px; touch-action: none; user-select: none; }
+  #stage.whip { cursor: none; }
+  select { background: #22223a; color: var(--text); border: 1px solid #3a3a5a; border-radius: 6px; padding: 3px 6px; font: inherit; }
+  .controls { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; margin: 10px 0 0; color: var(--muted); }
+  button { background: #22223a; color: var(--text); border: 1px solid #3a3a5a; border-radius: 8px; padding: 6px 12px; font: inherit; cursor: pointer; }
+  button:hover { background: #2c2c4a; }
+  kbd { background: #22223a; border: 1px solid #3a3a5a; border-bottom-width: 2px; border-radius: 5px; padding: 0 6px; font: 12px ui-monospace, monospace; color: var(--text); }
+  .status { margin-left: auto; font: 12px ui-monospace, monospace; color: var(--accent); }
+  table { border-collapse: collapse; width: 100%; }
+  td, th { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { color: var(--muted); font-weight: 500; }
+  ul { margin: 6px 0 0; padding-left: 18px; }
+  li { margin: 3px 0; }
+  .muted { color: var(--muted); }
+</style>
+</head>
+<body>
+<main>
+  <h1>Плеть — модель и анимация</h1>
+  <p class="lead">Эскиз для согласования. Внизу живая песочница: зажмите <kbd>⌥ Option</kbd> / <kbd>Alt</kbd> над полем — курсор станет плетью.</p>
+
+  <section class="card">
+    <h2>Модель</h2>
+    <svg id="model" viewBox="0 0 720 430" aria-label="Схема плети с подписями частей"></svg>
+  </section>
+
+  <section class="card">
+    <h2>Песочница</h2>
+    <svg id="stage" viewBox="0 0 1000 520" aria-label="Интерактивная плеть и паук-мишень"></svg>
+    <div class="controls">
+      <span><kbd>⌥</kbd> держать — плеть</span>
+      <span><kbd>ЛКМ</kbd> — удар</span>
+      <span><kbd>ПКМ</kbd> держать — раскрутка, отпустить — захлёст</span>
+      <label><input type="checkbox" id="lock"> плеть без клавиши</label>
+      <label>Цвет <select id="skin"><option value="light">светлая</option><option value="black">чёрная</option></select></label>
+      <label>Режим <select id="mode"><option value="game">игра: попади по пауку</option><option value="plain">просто плеть</option></select></label>
+      <button id="demoStrike">Показать удар</button>
+      <button id="demoSpin">Показать раскрутку</button>
+      <span class="status"><span id="score"></span> · <span id="status">курсор</span></span>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>Раскадровка</h2>
+    <svg id="film" viewBox="0 0 1120 470" aria-label="Ключевые кадры удара и захлёста"></svg>
+    <p class="muted">Кадры посчитаны той же физикой, что в песочнице. Крестик — точка курсора, звезда — где щёлкнул кончик.</p>
+  </section>
+
+  <div class="grid">
+    <section class="card">
+      <h2>ЛКМ — удар (≈ 0,5 с)</h2>
+      <table>
+        <tr><th>Фаза</th><th>Время</th><th>Что происходит</th></tr>
+        <tr><td>Замах</td><td>0–130 мс</td><td>кисть отходит назад, рукоять уходит за «плечо», хлыст перекатывается через верх</td></tr>
+        <tr><td>Бросок</td><td>130–210 мс</td><td>кисть выносится вперёд, рывок рукояти, по хлысту бежит волна</td></tr>
+        <tr><td>Щелчок</td><td>≈ 290 мс</td><td>петля развернулась, кончик в 180–250 pt впереди и быстрее порога — вспышка, лучи, кольцо</td></tr>
+        <tr><td>Возврат</td><td>210–500 мс</td><td>рукоять возвращается, хлыст опадает по инерции</td></tr>
+      </table>
+      <p class="muted">Хлыст — физическая цепочка (Verlet, 26 звеньев), анимируется только рукоять. Волна и щелчок получаются сами, поэтому каждый удар немного разный. Направление удара — куда двигалась мышь.</p>
+    </section>
+    <section class="card">
+      <h2>ПКМ — предложение</h2>
+      <ul>
+        <li><b>Раскрутка</b> (держать): кисть ходит по кругу, хлыст тянется следом и раскручивается, растёт «заряд» — до 1,2 с.</li>
+        <li><b>Захлёст</b> (отпустить): мощный бросок. Если паук в досягаемости (≈ 260 pt) — бросок наводится на него, хлыст обвивает его и подтягивает к курсору, потом паук вырывается и удирает. Если нет — усиленный щелчок.</li>
+      </ul>
+      <p class="muted">Альтернативы: «восьмёрка» (серия щелчков, пока держишь ПКМ) или подтянуть паука без раскрутки. Рекомендую раскрутку + захлёст: у ЛКМ и ПКМ разный ритм.</p>
+      <h2 style="margin-top:14px">Реакция паука</h2>
+      <ul>
+        <li>Щелчок рядом — вздрагивает, поджимает ноги, затем удирает от курсора.</li>
+        <li>Захлёст — пойман, тянется к курсору, вырывается.</li>
+      </ul>
+    </section>
+  </div>
+
+  <section class="card">
+    <h2>В приложении</h2>
+    <ul>
+      <li>Хоткей по умолчанию: удерживать <kbd>⌃ Control</kbd> + <kbd>⌥ Option</kbd> (на Windows <kbd>Ctrl</kbd> + <kbd>Alt</kbd>). Переназначается в настройках (<code>config.toml</code> + пункт «Плеть: хоткей…» в меню).</li>
+      <li>Пока хоткей зажат, оверлей перестаёт пропускать клики: ЛКМ/ПКМ достаются плети, а не приложениям под ней. Системный курсор скрыт.</li>
+      <li><b>Режимы</b> (меню → «Режим»): <i>Паук</i> — как сейчас, без плети; <i>Игра</i> — паук + плеть, счёт попаданий; <i>Просто плеть</i> — паука нет, бить можно по чему угодно, на месте удара остаётся гаснущий след.</li>
+      <li>Цвет плети — светлая / чёрная, в меню и в <code>config.toml</code>.</li>
+      <li>Чужие окна от удара трясутся только в эскизе. В приложении это потребовало бы разрешения «Универсальный доступ», поэтому предлагаю ограничиться следом и вспышкой на оверлее.</li>
+      <li>Плеть рисуется тем же рендером, что и паук (сегменты, точки, кольца). SVG — эталон формы и цветов, не ассет.</li>
+    </ul>
+  </section>
+</main>
+
+<script>
+(() => {
+  const NS = 'http://www.w3.org/2000/svg';
+  const el = (tag, attrs = {}, parent) => {
+    const e = document.createElementNS(NS, tag);
+    for (const k in attrs) e.setAttribute(k, attrs[k]);
+    if (parent) parent.appendChild(e);
+    return e;
+  };
+  const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+  const C = { accent: css('--accent') };
+  // Варианты плети. Чёрной нужна светлая кромка, иначе на тёмном рабочем столе её не видно.
+  const SKINS = {
+    light: { handle: '#2a1a10', edge: '#d89a5a', knob: '#d89a5a', braid: '#f3cf9a',
+             lash: '#c98a4c', lashEdge: '#d89a5a', lashBraid: '#f3cf9a', tuft: '#ffffff' },
+    black: { handle: '#0c0c0f', edge: '#6c6c7a', knob: '#9a9aa8', braid: '#5a5a68',
+             lash: '#141418', lashEdge: '#76768a', lashBraid: '#4a4a58', tuft: '#e8e8ee' },
+  };
+  let skin = SKINS.light;
+  // Режим песочницы: 'game' — паук-мишень, 'plain' — просто плеть.
+  let mode = 'game';
+  const lerp = (a, b, t) => a + (b - a) * t;
+  const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+  const angDiff = (a, b) => Math.atan2(Math.sin(b - a), Math.cos(b - a));
+  const easeOut = t => 1 - Math.pow(1 - t, 3);
+  const easeIn = t => t * t * t;
+
+  // ---------- общая геометрия ----------
+  // Рукоять в локальных координатах (вдоль +x), курсор держит её в точке GRIP_X.
+  const GRIP_X = 8, TIP_X = 46;
+
+  function buildHandle(parent, P = skin) {
+    const g = el('g', {}, parent);
+    el('path', { d: `M34 -3.5 L46 -1.6 L46 1.6 L34 3.5 Z`, fill: P.handle, stroke: P.edge, 'stroke-width': 1.2 }, g);
+    el('rect', { x: -2, y: -3.6, width: 36, height: 7.2, rx: 2.5, fill: P.handle, stroke: P.edge, 'stroke-width': 1.3 }, g);
+    for (let x = 1; x < 33; x += 4.5) {
+      el('line', { x1: x, y1: -3.4, x2: x + 3, y2: 3.4, stroke: P.braid, 'stroke-width': 0.9, 'stroke-opacity': 0.75 }, g);
+    }
+    el('circle', { cx: -6, cy: 0, r: 4.6, fill: P.knob, stroke: P.braid, 'stroke-width': 0.8 }, g);
+    el('circle', { cx: -6, cy: 0, r: 1.6, fill: P.handle }, g);
+    return g;
+  }
+
+  // Сужающийся хлыст: многоугольник по нормалям + насечки плетения + фол + хлопушка.
+  function lashGeometry(pts, k = 1) {
+    const n = pts.length, L = [], R = [];
+    const braid = [];
+    for (let i = 0; i < n; i++) {
+      const a = pts[Math.max(0, i - 1)], b = pts[Math.min(n - 1, i + 1)];
+      let dx = b.x - a.x, dy = b.y - a.y;
+      const len = Math.hypot(dx, dy) || 1; dx /= len; dy /= len;
+      const s = i / (n - 1);
+      const fallStart = 0.82;
+      const w = (s < fallStart ? lerp(3.4, 1.1, s / fallStart) : 0.7) * k;
+      L.push([pts[i].x - dy * w, pts[i].y + dx * w]);
+      R.push([pts[i].x + dy * w, pts[i].y - dx * w]);
+      if (i % 2 === 1 && s < fallStart) {
+        const bw = w * 0.9;
+        braid.push(`M${pts[i].x - dy * bw - dx * 1.2} ${pts[i].y + dx * bw - dy * 1.2} L${pts[i].x + dy * bw + dx * 1.2} ${pts[i].y - dx * bw + dy * 1.2}`);
+      }
+    }
+    const body = 'M' + L.map(p => p.join(' ')).join(' L') + ' L' + R.reverse().map(p => p.join(' ')).join(' L') + ' Z';
+    const tip = pts[n - 1], pre = pts[n - 2];
+    const ang = Math.atan2(tip.y - pre.y, tip.x - pre.x);
+    let tuft = '';
+    for (const a of [-0.5, -0.15, 0.2, 0.55]) {
+      const l = (6 + Math.abs(a) * 3) * k;
+      tuft += `M${tip.x} ${tip.y} L${tip.x + Math.cos(ang + a) * l} ${tip.y + Math.sin(ang + a) * l} `;
+    }
+    return { body, braid: braid.join(' '), tuft };
+  }
+
+  function buildLash(parent, P = skin) {
+    return {
+      body: el('path', { fill: P.lash, stroke: P.lashEdge, 'stroke-width': 0.6 }, parent),
+      braid: el('path', { stroke: P.lashBraid, 'stroke-width': 0.8, 'stroke-opacity': 0.7, fill: 'none' }, parent),
+      tuft: el('path', { stroke: P.tuft, 'stroke-width': 1, 'stroke-linecap': 'round', fill: 'none' }, parent),
+    };
+  }
+  function drawLash(l, pts) {
+    const g = lashGeometry(pts);
+    l.body.setAttribute('d', g.body);
+    l.braid.setAttribute('d', g.braid);
+    l.tuft.setAttribute('d', g.tuft);
+  }
+
+  // ---------- схема модели ----------
+  (function model() {
+    const svg = document.getElementById('model');
+    const S = 2.2, ox = 70;
+    // Справа светлая подложка: как плеть смотрится поверх белого окна.
+    el('rect', { x: 470, y: 0, width: 250, height: 400, rx: 8, fill: '#ececf2' }, svg);
+    const t1 = el('text', { x: 595, y: 18, fill: '#55556a', 'font-size': 11, 'text-anchor': 'middle' }, svg);
+    t1.textContent = 'поверх светлого окна';
+    const rows = [['Светлая', SKINS.light, 115, true], ['Чёрная', SKINS.black, 305, false]];
+    for (const [name, P, oy, withLabels] of rows) {
+      const root = el('g', { transform: `translate(${ox} ${oy})` }, svg);
+      const cap = el('text', { x: -60, y: -48, fill: C.accent, 'font-size': 14, 'font-weight': 600 }, root);
+      cap.textContent = name;
+      buildHandle(el('g', { transform: `scale(${S})` }, root), P);
+      const pts = [];
+      const P0 = [TIP_X * S, 0], P1 = [TIP_X * S + 160, -10], P2 = [TIP_X * S + 300, 110], P3 = [TIP_X * S + 520, 40];
+      for (let i = 0; i <= 40; i++) {
+        const t = i / 40, u = 1 - t;
+        pts.push({
+          x: u*u*u*P0[0] + 3*u*u*t*P1[0] + 3*u*t*t*P2[0] + t*t*t*P3[0],
+          y: u*u*u*P0[1] + 3*u*u*t*P1[1] + 3*u*t*t*P2[1] + t*t*t*P3[1],
+        });
+      }
+      // На схеме хлыст толще, чтобы читалось плетение.
+      const lash = buildLash(el('g', {}, root), P);
+      const g = lashGeometry(pts, 2);
+      lash.body.setAttribute('d', g.body); lash.braid.setAttribute('d', g.braid); lash.tuft.setAttribute('d', g.tuft);
+      el('circle', { cx: GRIP_X * S, cy: 0, r: 3, fill: 'none', stroke: '#7fe0b0', 'stroke-width': 1.2 }, root);
+      el('path', { d: `M${GRIP_X*S-7} 0 H${GRIP_X*S+7} M${GRIP_X*S} -7 V7`, stroke: '#7fe0b0', 'stroke-width': 1 }, root);
+      if (!withLabels) continue;
+      const labels = [
+        [ -6*S, 10, -6*S - 10, 78, 'Навершие'],
+        [ 16*S, -9, 16*S + 10, -60, 'Рукоять, кожаная обмотка'],
+        [ GRIP_X*S, 8, GRIP_X*S + 40, 104, 'Точка курсора'],
+        [ 40*S, 5, 40*S + 40, 78, 'Переход'],
+        [ pts[12].x, pts[12].y - 6, pts[12].x + 10, -70, 'Хлыст — плетёный, сужается'],
+        [ pts[36].x, pts[36].y - 4, pts[36].x - 40, -40, 'Фол'],
+        [ pts[40].x + 6, pts[40].y, pts[40].x - 30, 100, 'Хлопушка'],
+      ];
+      for (const [x1, y1, x2, y2, t] of labels) {
+        const onLight = x2 + ox > 470;
+        el('line', { x1, y1, x2, y2: y2 + (y2 < 0 ? 4 : -12), stroke: onLight ? '#9a9ab0' : '#55557a', 'stroke-width': 1 }, root);
+        const tx = el('text', { x: x2, y: y2, fill: onLight ? '#33334a' : '#c8c8dc', 'font-size': 13, 'text-anchor': 'middle' }, root);
+        tx.textContent = t;
+      }
+    }
+    const dim = el('text', { x: 360, y: 420, fill: '#77779a', 'font-size': 12, 'text-anchor': 'middle' }, svg);
+    dim.textContent = 'рукоять ≈ 50 pt · хлыст ≈ 190 pt · у чёрной — светлая кромка, чтобы читалась на тёмном рабочем столе';
+  })();
+
+  // ---------- песочница ----------
+  const svg = document.getElementById('stage');
+  const W = 1000, H = 520;
+  const status = document.getElementById('status');
+  const lockBox = document.getElementById('lock');
+
+  const layerApp = el('g', {}, svg);
+  const layerWelts = el('g', {}, svg);
+  const layerTarget = el('g', {}, svg);
+  const layerFx = el('g', {}, svg);
+  const layerWhip = el('g', {}, svg);
+  const chargeRing = el('circle', { r: 38, fill: 'none', stroke: C.accent, 'stroke-width': 1.2, 'stroke-dasharray': '3 5', opacity: 0 }, layerWhip);
+  const lashG = el('g', {}, layerWhip);
+  const handleG = el('g', {}, layerWhip);
+  let lash;
+  function rebuildWhip() {
+    lashG.replaceChildren(); handleG.replaceChildren();
+    lash = buildLash(lashG); buildHandle(handleG);
+  }
+  rebuildWhip();
+
+  // Хлыст: цепочка Verlet.
+  const N = 26, SEG = 7.4, LASH = N * SEG, REACH = LASH + (TIP_X - GRIP_X) + 30;
+  // Щелчок, только когда петля почти развернулась: кончик впереди кисти хотя бы на столько.
+  const CRACK_AHEAD = 160;
+  const pts = Array.from({ length: N }, (_, i) => ({ x: 500, y: 200 + i * SEG, px: 500, py: 200 + i * SEG }));
+
+  const S = {
+    active: false, keyHeld: false, mouse: { x: 500, y: 200 }, vel: { x: 0, y: 0 },
+    aim: -0.9, angle: -0.9, mode: 'ready', t: 0, key: null, cracked: false, off: { x: 0, y: 0 }, resid: { x: 0, y: 0 }, spinPhase: 0,
+    spin: 0, spinTime: 0, power: false, wrap: null,
+  };
+
+  function toStage(e) {
+    const r = svg.getBoundingClientRect();
+    return { x: (e.clientX - r.left) * W / r.width, y: (e.clientY - r.top) * H / r.height };
+  }
+  function setActive(on) {
+    if (on === S.active) return;
+    S.active = on;
+    svg.classList.toggle('whip', on);
+    layerWhip.style.display = on ? '' : 'none';
+    if (on) resetLash();
+    if (!on) { S.mode = 'ready'; S.wrap = null; }
+  }
+  function resetLash() {
+    const tip = handleTip();
+    pts.forEach((p, i) => { p.x = p.px = tip.x; p.y = p.py = tip.y + i * SEG; });
+  }
+  function refreshActive() { setActive(S.keyHeld || lockBox.checked); }
+
+  window.addEventListener('keydown', e => { if (e.key === 'Alt') { S.keyHeld = true; refreshActive(); e.preventDefault(); } });
+  window.addEventListener('keyup', e => { if (e.key === 'Alt') { S.keyHeld = false; refreshActive(); } });
+  window.addEventListener('blur', () => { S.keyHeld = false; refreshActive(); });
+  lockBox.addEventListener('change', refreshActive);
+
+  let lastMove = performance.now();
+  svg.addEventListener('pointermove', e => {
+    const p = toStage(e), now = performance.now(), dt = Math.max(1, now - lastMove) / 1000;
+    S.vel.x = lerp(S.vel.x, (p.x - S.mouse.x) / dt, 0.3);
+    S.vel.y = lerp(S.vel.y, (p.y - S.mouse.y) / dt, 0.3);
+    S.mouse = p; lastMove = now;
+  });
+  svg.addEventListener('contextmenu', e => e.preventDefault());
+  svg.addEventListener('pointerdown', e => {
+    if (!S.active) return;
+    S.mouse = toStage(e);
+    if (e.button === 0 && S.mode === 'ready') startStrike(false);
+    if (e.button === 2 && S.mode === 'ready') { S.mode = 'spin'; S.spinTime = 0; S.spinPhase = S.angle - Math.PI / 2; }
+  });
+  window.addEventListener('pointerup', e => { if (e.button === 2 && S.mode === 'spin') releaseSpin(); });
+
+  function startStrike(power) {
+    S.mode = 'strike'; S.t = 0; S.cracked = false; S.power = power;
+    if (!power) S.lasso = false;
+    const a0 = S.angle, A = S.aim;
+    const dx = Math.cos(A), dy = Math.sin(A);
+    // Смещение кисти раскладываем на «вдоль прицела» (анимируется) и остаток (быстро гаснет).
+    const along0 = S.off.x * dx + S.off.y * dy;
+    S.resid = { x: S.off.x - dx * along0, y: S.off.y - dy * along0 };
+    if (power) {
+      // Бросок продолжает вращение раскрутки (по часовой), без разворота назад.
+      let delta = (((A - 0.3 - a0) % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI);
+      if (delta < 0.8) delta += 2 * Math.PI;
+      S.key = [[0, a0, null, along0], [0.09, a0 + delta, easeIn, 34], [0.42, a0 + delta + 0.3, easeOut, 0]];
+    } else {
+      // Замах назад «через верх» с отводом кисти, бросок с выносом кисти вперёд, возврат.
+      const back = A - Math.sign(Math.cos(A) || 1) * Math.PI * 0.85;
+      S.key = [[0, a0, null, along0], [0.13, a0 + angDiff(a0, back), easeOut, -22],
+               [0.21, back + angDiff(back, A - 0.3), easeIn, 30], [0.5, A, easeOut, 0]];
+    }
+  }
+  function releaseSpin() {
+    const T = target;
+    const tip = handleTip();
+    const d = Math.hypot(T.x - S.mouse.x, T.y - S.mouse.y);
+    // Досягаемость: хлыст + рукоять + запас на вынос кисти.
+    S.lasso = mode === 'game' && d < REACH;
+    if (S.lasso) S.aim = Math.atan2(T.y - S.mouse.y, T.x - S.mouse.x);
+    S.chargeOnRelease = clamp(S.spinTime / 1.2, 0, 1);
+    startStrike(true);
+  }
+  // Ключ: [время, угол рукояти, функция сглаживания, вынос кисти вдоль прицела].
+  function keyAt(t) {
+    const k = S.key;
+    for (let i = 1; i < k.length; i++) {
+      if (t <= k[i][0]) {
+        const u = (k[i][2] || (x => x))(clamp((t - k[i - 1][0]) / (k[i][0] - k[i - 1][0]), 0, 1));
+        return { a: lerp(k[i - 1][1], k[i][1], u), along: lerp(k[i - 1][3], k[i][3], u) };
+      }
+    }
+    return null;
+  }
+  // Насколько точка впереди кисти по направлению удара.
+  function ahead(p) { const h = hand(); return (p.x - h.x) * Math.cos(S.aim) + (p.y - h.y) * Math.sin(S.aim); }
+  // Прошла ли дальняя половина хлыста рядом с точкой.
+  function lashNear(p, r) {
+    for (let i = N >> 1; i < N; i++) if (Math.hypot(pts[i].x - p.x, pts[i].y - p.y) < r) return true;
+    return false;
+  }
+  function hand() { return { x: S.mouse.x + S.off.x, y: S.mouse.y + S.off.y }; }
+  function handleTip() {
+    const d = TIP_X - GRIP_X, h = hand();
+    return { x: h.x + Math.cos(S.angle) * d, y: h.y + Math.sin(S.angle) * d };
+  }
+
+  // ---------- эффект щелчка ----------
+  const fx = [];
+  let recording = null;
+  function crack(x, y, big) {
+    if (recording) { recording.crack = { x, y, big }; return; }
+    const g = el('g', { transform: `translate(${x} ${y})` }, layerFx);
+    const flash = el('circle', { r: 2, fill: '#fff4c2' }, g);
+    const ring = el('circle', { r: 4, fill: 'none', stroke: '#ffe9a8', 'stroke-width': 1.5 }, g);
+    const rays = el('path', { stroke: C.accent, 'stroke-width': 1.6, 'stroke-linecap': 'round', fill: 'none' }, g);
+    fx.push({ g, flash, ring, rays, t: 0, big, rot: Math.random() * Math.PI });
+    onCrack(x, y, big);
+  }
+  function updateFx(dt) {
+    for (let i = fx.length - 1; i >= 0; i--) {
+      const f = fx[i]; f.t += dt;
+      const k = f.big ? 1.6 : 1, u = f.t / 0.4;
+      if (u >= 1) { f.g.remove(); fx.splice(i, 1); continue; }
+      f.flash.setAttribute('r', 3 + 12 * k * easeOut(Math.min(1, u * 3)));
+      f.flash.setAttribute('opacity', Math.max(0, 1 - u * 3));
+      f.ring.setAttribute('r', 4 + 34 * k * easeOut(u));
+      f.ring.setAttribute('opacity', 1 - u);
+      let d = '';
+      for (let j = 0; j < 8; j++) {
+        const a = f.rot + j * Math.PI / 4, r0 = 6 + 10 * k * u, r1 = r0 + 10 * k * (1 - u);
+        d += `M${Math.cos(a) * r0} ${Math.sin(a) * r0} L${Math.cos(a) * r1} ${Math.sin(a) * r1} `;
+      }
+      f.rays.setAttribute('d', d);
+      f.rays.setAttribute('opacity', 1 - u);
+    }
+  }
+
+  // ---------- паук-мишень ----------
+  const target = { x: 760, y: 330, vx: 0, vy: 0, heading: Math.PI, state: 'wander', t: 0, goal: null, phase: 0, flash: 0 };
+  const tg = el('g', {}, layerTarget);
+  const tLegs = el('path', { stroke: '#3a3aff', 'stroke-width': 1.3, fill: 'none', 'stroke-linejoin': 'round' }, tg);
+  const tDots = el('path', { stroke: '#ffffff', 'stroke-width': 2.4, 'stroke-linecap': 'round', fill: 'none' }, tg);
+  const tBody = el('rect', { x: -12, y: -7, width: 24, height: 14, rx: 2, fill: 'none', stroke: '#7fe0b0', 'stroke-width': 1.4 }, tg);
+  const tHead = el('circle', { cx: 7, cy: 0, r: 3.4, fill: '#fff' }, tg);
+
+  function hitTest(x, y, big) {
+    if (target.state === 'wrapped') return;
+    if (Math.hypot(target.x - x, target.y - y) < (big ? 55 : 42)) {
+      score.hits++;
+      target.state = 'stunned'; target.t = 0; target.flash = 1;
+      const a = Math.atan2(target.y - y, target.x - x) || 0;
+      target.vx = Math.cos(a) * 160; target.vy = Math.sin(a) * 160;
+    }
+  }
+  function updateTarget(dt) {
+    const T = target; T.t += dt; T.flash = Math.max(0, T.flash - dt * 2.5);
+    let speed = 0;
+    if (T.state === 'wander') {
+      if (!T.goal || Math.hypot(T.goal.x - T.x, T.goal.y - T.y) < 10) {
+        T.goal = { x: 120 + Math.random() * (W - 240), y: 90 + Math.random() * (H - 180) };
+      }
+      const a = Math.atan2(T.goal.y - T.y, T.goal.x - T.x);
+      T.vx = lerp(T.vx, Math.cos(a) * 70, 0.05); T.vy = lerp(T.vy, Math.sin(a) * 70, 0.05);
+    } else if (T.state === 'stunned') {
+      T.vx *= 0.9; T.vy *= 0.9;
+      if (T.t > 0.45) { T.state = 'flee'; T.t = 0; }
+    } else if (T.state === 'flee') {
+      const a = Math.atan2(T.y - S.mouse.y, T.x - S.mouse.x);
+      const sp = lerp(420, 70, clamp(T.t / 1.4, 0, 1));
+      T.vx = lerp(T.vx, Math.cos(a) * sp, 0.15); T.vy = lerp(T.vy, Math.sin(a) * sp, 0.15);
+      if (T.t > 1.4) { T.state = 'wander'; T.goal = null; }
+    }
+    if (T.state !== 'wrapped') {
+      T.x += T.vx * dt; T.y += T.vy * dt;
+      if (T.x < 30 || T.x > W - 30) { T.vx *= -1; T.x = clamp(T.x, 30, W - 30); }
+      if (T.y < 30 || T.y > H - 30) { T.vy *= -1; T.y = clamp(T.y, 30, H - 30); }
+      speed = Math.hypot(T.vx, T.vy);
+      if (speed > 8) T.heading += angDiff(T.heading, Math.atan2(T.vy, T.vx)) * Math.min(1, dt * 8);
+    }
+    T.phase += (T.state === 'wrapped' ? 900 : speed) * dt * 0.09;
+    drawTarget();
+  }
+  function drawTarget() {
+    const T = target, curl = T.state === 'stunned' || T.state === 'wrapped';
+    const spread = [40, 80, 115, 150], along = [5, 2, -2, -5];
+    const fx_ = Math.cos(T.heading), fy = Math.sin(T.heading);
+    let legs = '', dots = '';
+    for (let k = 0; k < 4; k++) for (const side of [-1, 1]) {
+      const sw = Math.sin(T.phase + (k % 2 ? Math.PI : 0) + (side > 0 ? Math.PI : 0)) * 0.22;
+      const hx = T.x + fx_ * along[k], hy = T.y + fy * along[k];
+      const R = curl ? 16 : 30;
+      const aKnee = T.heading + side * (spread[k] * Math.PI / 180 * 0.75 + sw);
+      const aFoot = T.heading + side * (spread[k] * Math.PI / 180 + sw);
+      const kx = hx + Math.cos(aKnee) * R * 0.6 + Math.cos(aKnee + side * Math.PI / 2) * 4, ky = hy + Math.sin(aKnee) * R * 0.6 + Math.sin(aKnee + side * Math.PI / 2) * 4;
+      const footx = hx + Math.cos(aFoot) * R, footy = hy + Math.sin(aFoot) * R;
+      legs += `M${hx} ${hy} L${kx} ${ky} L${footx} ${footy} `;
+      dots += `M${kx} ${ky} h0 M${footx} ${footy} h0 `;
+    }
+    tLegs.setAttribute('d', legs); tDots.setAttribute('d', dots);
+    const deg = T.heading * 180 / Math.PI;
+    tBody.setAttribute('transform', `translate(${T.x} ${T.y}) rotate(${deg})`);
+    tHead.setAttribute('transform', `translate(${T.x} ${T.y}) rotate(${deg})`);
+    const red = T.flash > 0 ? `rgb(255,${Math.round(127 + 128 * (1 - T.flash))},${Math.round(176 * (1 - T.flash))})` : '#7fe0b0';
+    tBody.setAttribute('stroke', T.flash > 0 ? '#ff6b6b' : red);
+    tLegs.setAttribute('stroke', T.flash > 0.3 ? '#ff6b6b' : '#3a3aff');
+  }
+
+  // ---------- шаг симуляции ----------
+  const G = 800, DAMP = 0.998, ITER = 14, DT = 1 / 240;
+  function step(dt) {
+    // Направление удара — куда двигалась мышь.
+    const sp = Math.hypot(S.vel.x, S.vel.y);
+    if (S.mode === 'ready' && sp > 350) S.aim += angDiff(S.aim, Math.atan2(S.vel.y, S.vel.x)) * Math.min(1, dt * 6);
+    S.vel.x *= 0.98; S.vel.y *= 0.98;
+
+    const relax = Math.min(1, dt * 10);
+    if (S.mode === 'ready') {
+      S.angle += angDiff(S.angle, S.aim) * Math.min(1, dt * 8);
+      S.off.x -= S.off.x * relax; S.off.y -= S.off.y * relax;
+    } else if (S.mode === 'strike') {
+      S.t += dt;
+      const k = keyAt(S.t);
+      if (k === null) { S.mode = 'ready'; S.angle = S.aim; }
+      else {
+        S.angle = k.a;
+        const fade = Math.max(0, 1 - S.t / 0.1);
+        S.off.x = Math.cos(S.aim) * k.along + S.resid.x * fade;
+        S.off.y = Math.sin(S.aim) * k.along + S.resid.y * fade;
+      }
+    } else if (S.mode === 'spin') {
+      // Кисть ходит по кругу, рукоять смотрит по касательной, хлыст тянется следом.
+      S.spinTime += dt;
+      const charge = clamp(S.spinTime / 1.2, 0, 1);
+      S.spin = lerp(3, 10, charge);
+      S.spinPhase += S.spin * dt;
+      const R = lerp(6, 28, charge);
+      S.off.x = Math.cos(S.spinPhase) * R; S.off.y = Math.sin(S.spinPhase) * R;
+      S.angle = S.spinPhase + Math.PI / 2;
+    } else if (S.mode === 'wrap') {
+      const w = S.wrap; w.t += dt;
+      S.angle += angDiff(S.angle, S.aim) * Math.min(1, dt * 6);
+      const goal = { x: S.mouse.x + Math.cos(S.aim) * 70, y: S.mouse.y + Math.sin(S.aim) * 70 };
+      const u = easeOut(clamp(w.t / 0.7, 0, 1));
+      target.x = lerp(w.from.x, goal.x, u); target.y = lerp(w.from.y, goal.y, u);
+      if (w.t > 1.0) { S.mode = 'ready'; S.wrap = null; target.state = 'flee'; target.t = 0; target.flash = 0.6; }
+    }
+
+    // Verlet.
+    for (let i = 2; i < N; i++) {
+      const p = pts[i];
+      const vx = (p.x - p.px) * DAMP, vy = (p.y - p.py) * DAMP;
+      p.px = p.x; p.py = p.y;
+      p.x += vx; p.y += vy + (S.mode === 'spin' ? G * 0.25 : G) * dt * dt;
+    }
+    const tip = handleTip(), dir = { x: Math.cos(S.angle), y: Math.sin(S.angle) };
+    const pin = (i, x, y) => { pts[i].px = pts[i].x; pts[i].py = pts[i].y; pts[i].x = x; pts[i].y = y; };
+    pin(0, tip.x, tip.y);
+    pin(1, tip.x + dir.x * SEG, tip.y + dir.y * SEG);
+    const coil = S.mode === 'wrap' ? 9 : 0;
+    for (let it = 0; it < ITER; it++) {
+      for (let i = 1; i < N - 1; i++) {
+        const a = pts[i], b = pts[i + 1];
+        const dx = b.x - a.x, dy = b.y - a.y, d = Math.hypot(dx, dy) || 1e-6;
+        const diff = (d - SEG) / d;
+        const wa = i <= 1 ? 0 : 0.5, wb = i <= 1 ? 1 : 0.5;
+        a.x += dx * diff * wa; a.y += dy * diff * wa;
+        b.x -= dx * diff * wb; b.y -= dy * diff * wb;
+      }
+      // Лёгкая жёсткость на изгиб — волна идёт плавнее.
+      for (let i = 1; i < N - 2; i++) {
+        const a = pts[i], c = pts[i + 2];
+        const dx = c.x - a.x, dy = c.y - a.y, d = Math.hypot(dx, dy) || 1e-6;
+        if (d < SEG * 1.6) {
+          const diff = (d - SEG * 1.6) / d * 0.15;
+          if (i > 1) { a.x += dx * diff; a.y += dy * diff; }
+          c.x -= dx * diff; c.y -= dy * diff;
+        }
+      }
+      if (coil) {
+        const w = S.wrap;
+        for (let j = 0; j < coil; j++) {
+          const p = pts[N - coil + j], a = w.phase + j * 0.75;
+          p.x = target.x + Math.cos(a) * 13; p.y = target.y + Math.sin(a) * 13;
+        }
+        pts[0].x = tip.x; pts[0].y = tip.y;
+      }
+    }
+
+    // Щелчок: кончик превысил порог скорости во время броска.
+    if (S.mode === 'strike' && !S.cracked && S.t > (S.power ? 0.04 : 0.15)) {
+      const e = pts[N - 1], v = Math.hypot(e.x - e.px, e.y - e.py) / dt;
+      if (S.power && S.lasso && lashNear(target, 30) && target.state !== 'wrapped') {
+        S.cracked = true; S.mode = 'wrap';
+        S.wrap = { t: 0, phase: Math.atan2(e.y - target.y, e.x - target.x), from: { x: target.x, y: target.y } };
+        target.state = 'wrapped'; target.flash = 1;
+        crack(e.x, e.y, false);
+      } else if ((!(S.power && S.lasso) && v > (S.power ? 1500 : 1800) && ahead(e) > CRACK_AHEAD) || S.t > (S.power ? 0.3 : 0.34)) {
+        S.cracked = true;
+        crack(e.x, e.y, S.power);
+      }
+    }
+  }
+
+  function render() {
+    handleG.setAttribute('transform', `translate(${hand().x} ${hand().y}) rotate(${S.angle * 180 / Math.PI}) translate(${-GRIP_X} 0)`);
+    drawLash(lash, pts);
+    const charge = S.mode === 'spin' ? clamp(S.spinTime / 1.2, 0, 1) : 0;
+    chargeRing.setAttribute('cx', S.mouse.x); chargeRing.setAttribute('cy', S.mouse.y);
+    chargeRing.setAttribute('r', 38 + 6 * charge);
+    chargeRing.setAttribute('opacity', charge * 0.9);
+    status.textContent = !S.active ? 'курсор' : ({ ready: 'плеть', strike: S.power ? 'захлёст' : 'удар', spin: `раскрутка ${Math.round(charge * 100)}%`, wrap: 'поймал!' })[S.mode];
+  }
+
+  // ---------- раскадровка ----------
+  function record(kind, times) {
+    const saved = {
+      pts: pts.map(p => ({ ...p })), mouse: S.mouse, angle: S.angle, aim: S.aim, mode: S.mode, t: S.t,
+      key: S.key, cracked: S.cracked, power: S.power, spin: S.spin, spinTime: S.spinTime, wrap: S.wrap, vel: { ...S.vel },
+      off: { ...S.off }, resid: { ...S.resid }, spinPhase: S.spinPhase,
+      tx: target.x, ty: target.y, ts: target.state,
+    };
+    target.x = 1e6; target.y = 1e6;
+    S.mouse = { x: 0, y: 0 }; S.vel = { x: 0, y: 0 }; S.off = { x: 0, y: 0 }; S.aim = S.angle = -0.35; S.mode = 'ready';
+    pts.forEach((p, i) => { p.x = p.px = 30 + i * 2; p.y = p.py = i * SEG; });
+    for (let i = 0; i < 480; i++) step(DT);
+    recording = { crack: null };
+    const frames = [];
+    let t = 0, ti = 0, released = false;
+    if (kind === 'strike') startStrike(false); else { S.mode = 'spin'; S.spinTime = 0; S.spinPhase = S.angle - Math.PI / 2; }
+    while (ti < times.length) {
+      if (kind === 'spin' && !released && t >= 1.25) { released = true; releaseSpin(); }
+      step(DT); t += DT;
+      if (recording.crack && !recording.crack.t) recording.crack.t = t;
+      if (t >= times[ti] - 1e-9) {
+        frames.push({ t: times[ti], angle: S.angle, hand: { ...S.off }, pts: pts.map(p => ({ x: p.x, y: p.y })), crack: recording.crack && !recording.crack.used ? recording.crack : null });
+        if (recording.crack) recording.crack.used = true;
+        ti++;
+      }
+    }
+    const crackT = recording.crack ? recording.crack.t : null;
+    recording = null;
+    Object.assign(S, { mouse: saved.mouse, angle: saved.angle, aim: saved.aim, mode: saved.mode, t: saved.t, key: saved.key,
+      cracked: saved.cracked, power: saved.power, spin: saved.spin, spinTime: saved.spinTime, wrap: saved.wrap, vel: saved.vel,
+      off: saved.off, resid: saved.resid, spinPhase: saved.spinPhase });
+    saved.pts.forEach((p, i) => Object.assign(pts[i], p));
+    target.x = saved.tx; target.y = saved.ty; target.state = saved.ts;
+    return { frames, crackT };
+  }
+  function drawFilm() {
+    const film = document.getElementById('film');
+    film.replaceChildren();
+    // Пробный прогон находит момент щелчка, кадры раскладываем вокруг него.
+    const tcS = record('strike', [0.6]).crackT ?? 0.22;
+    const tcP = record('spin', [1.9]).crackT ?? 1.4;
+    const rows = [
+      ['Удар (ЛКМ)', record('strike', [0, 0.07, 0.13, (0.13 + tcS) / 2, tcS, tcS + 0.05, 0.38, 0.55]).frames,
+        ['покой', 'замах', 'замах', 'бросок', 'щелчок', 'волна', 'возврат', 'возврат']],
+      ['Раскрутка → захлёст (ПКМ)', record('spin', [0.2, 0.5, 0.8, 1.1, 1.25, (1.25 + tcP) / 2, tcP, tcP + 0.3]).frames,
+        ['раскрутка', 'раскрутка', 'раскрутка', 'заряд 90%', 'отпустил', 'бросок', 'щелчок', 'возврат']],
+    ];
+    const PW = 140, PH = 200, SC = 0.42;
+    rows.forEach(([title, frames, captions], r) => {
+      const oy = r * (PH + 35);
+      const tt = el('text', { x: 4, y: oy + 14, fill: C.accent, 'font-size': 14, 'font-weight': 600 }, film);
+      tt.textContent = title;
+      frames.forEach((f, i) => {
+        const ox = i * PW;
+        el('rect', { x: ox + 2, y: oy + 22, width: PW - 6, height: PH - 6, rx: 8, fill: '#07070c', stroke: '#26263a' }, film);
+        const g = el('g', { transform: `translate(${ox + PW / 2} ${oy + 22 + 78}) scale(${SC})` }, film);
+        const l = buildLash(g);
+        drawLash(l, f.pts);
+        const hg = el('g', { transform: `translate(${f.hand.x} ${f.hand.y}) rotate(${f.angle * 180 / Math.PI}) translate(${-GRIP_X} 0)` }, g);
+        buildHandle(hg);
+        el('path', { d: 'M-12 0 H12 M0 -12 V12', stroke: '#7fe0b0', 'stroke-width': 2.4 }, g);
+        if (f.crack) {
+          let d = '';
+          for (let j = 0; j < 8; j++) { const a = j * Math.PI / 4, r0 = j % 2 ? 8 : 14; d += (j ? 'L' : 'M') + (f.crack.x + Math.cos(a) * r0 * 2) + ' ' + (f.crack.y + Math.sin(a) * r0 * 2); }
+          el('path', { d: d + 'Z', fill: '#ffe9a8', stroke: C.accent, 'stroke-width': 2 }, g);
+        }
+        const c = el('text', { x: ox + PW / 2 - 2, y: oy + 22 + PH - 14, fill: '#c8c8dc', 'font-size': 12, 'text-anchor': 'middle' }, film);
+        c.textContent = `${captions[i]} · ${Math.round(f.t * 1000)} мс`;
+      });
+    });
+  }
+  drawFilm();
+
+  // Отладочный доступ для проверки из консоли.
+  window.__whip = { S, target, step, releaseSpin, startStrike, setActive, resetLash, render, DT };
+
+  // ---------- режимы ----------
+  const score = { strikes: 0, hits: 0, onApp: 0 };
+  const scoreEl = document.getElementById('score');
+  function showScore() {
+    scoreEl.textContent = mode === 'game'
+      ? `попаданий: ${score.hits} из ${score.strikes}`
+      : `ударов: ${score.strikes}, по окну: ${score.onApp}`;
+  }
+  document.getElementById('mode').onchange = e => {
+    mode = e.target.value;
+    score.strikes = score.hits = score.onApp = 0;
+    layerTarget.style.display = mode === 'game' ? '' : 'none';
+    layerApp.style.display = mode === 'plain' ? '' : 'none';
+    layerWelts.replaceChildren(); welts.length = 0;
+    showScore();
+  };
+  document.getElementById('skin').onchange = e => { skin = SKINS[e.target.value]; rebuildWhip(); drawFilm(); };
+
+  // «Зависший мессенджер» — условное окно для режима «просто плеть».
+  const APP = { x: 500, y: 110, w: 400, h: 270, shake: 0 };
+  const appG = el('g', {}, layerApp);
+  el('rect', { x: 4, y: 8, width: APP.w, height: APP.h, rx: 12, fill: '#000', opacity: 0.35 }, appG);
+  el('rect', { width: APP.w, height: APP.h, rx: 12, fill: '#f4f4f8', stroke: '#c8c8d4' }, appG);
+  el('path', { d: `M0 12 a12 12 0 0 1 12 -12 H${APP.w - 12} a12 12 0 0 1 12 12 V32 H0 Z`, fill: '#e2e2ea' }, appG);
+  ['#ff6159', '#ffbd2e', '#28c941'].forEach((c, i) => el('circle', { cx: 16 + i * 18, cy: 16, r: 5.5, fill: c }, appG));
+  const appTitle = el('text', { x: APP.w / 2, y: 21, fill: '#44445a', 'font-size': 13, 'text-anchor': 'middle' }, appG);
+  appTitle.textContent = 'Мессенджер (не отвечает)';
+  [[20, 52, 190, '#dcdce6'], [190, 96, 190, '#cfe0ff'], [20, 140, 230, '#dcdce6'], [150, 184, 230, '#cfe0ff']].forEach(([x, y, w, c]) =>
+    el('rect', { x, y, width: w, height: 32, rx: 10, fill: c }, appG));
+  el('rect', { y: 32, width: APP.w, height: APP.h - 32, fill: '#fff', opacity: 0.45 }, appG);
+  const spinner = el('circle', { cx: APP.w / 2, cy: 150, r: 18, fill: 'none', stroke: '#7a7a90', 'stroke-width': 4, 'stroke-dasharray': '28 85', 'stroke-linecap': 'round' }, appG);
+  layerApp.style.display = 'none';
+
+  // След от удара: красная полоса вдоль хлыста, гаснет за 2,5 с.
+  const welts = [];
+  function addWelt(x, y, big) {
+    const a = Math.atan2(pts[N - 1].y - pts[N - 4].y, pts[N - 1].x - pts[N - 4].x);
+    const l = big ? 26 : 18, dx = Math.cos(a) * l, dy = Math.sin(a) * l;
+    const g = el('g', {}, layerWelts);
+    el('path', { d: `M${x - dx} ${y - dy} Q${x - dy * 0.25} ${y + dx * 0.25} ${x + dx} ${y + dy}`, stroke: '#ff4d6d', 'stroke-width': big ? 5 : 3.5, 'stroke-linecap': 'round', fill: 'none', opacity: 0.85 }, g);
+    el('path', { d: `M${x - dx * 0.8} ${y - dy * 0.8} Q${x - dy * 0.25} ${y + dx * 0.25} ${x + dx * 0.8} ${y + dy * 0.8}`, stroke: '#ffd0d8', 'stroke-width': 1, 'stroke-linecap': 'round', fill: 'none' }, g);
+    welts.push({ g, t: 0 });
+  }
+  function onCrack(x, y, big) {
+    score.strikes++;
+    if (mode === 'game') { hitTest(x, y, big); }
+    else {
+      addWelt(x, y, big);
+      if (x > APP.x && x < APP.x + APP.w && y > APP.y && y < APP.y + APP.h) { score.onApp++; APP.shake = big ? 0.5 : 0.35; }
+    }
+    showScore();
+  }
+  let spinA = 0;
+  function updateApp(dt) {
+    spinA += dt * 300;
+    spinner.setAttribute('transform', `rotate(${spinA} ${APP.w / 2} 150)`);
+    APP.shake = Math.max(0, APP.shake - dt);
+    const k = APP.shake * 14;
+    appG.setAttribute('transform', `translate(${APP.x + (Math.random() - 0.5) * k} ${APP.y + (Math.random() - 0.5) * k})`);
+    for (let i = welts.length - 1; i >= 0; i--) {
+      const w = welts[i]; w.t += dt;
+      if (w.t > 2.5) { w.g.remove(); welts.splice(i, 1); continue; }
+      w.g.setAttribute('opacity', w.t < 1.5 ? 1 : 1 - (w.t - 1.5));
+    }
+  }
+  showScore();
+
+  // ---------- демо-кнопки ----------
+  let demo = null;
+  function runDemo(kind) {
+    lockBox.checked = true; refreshActive();
+    S.mouse = { x: 360, y: 300 }; S.aim = -0.35; S.angle = -0.35; resetLash();
+    target.x = 560; target.y = 240; target.state = 'wander'; target.goal = { x: 590, y: 250 };
+    S.mode = 'ready';
+    demo = { kind, t: 0, fired: false };
+  }
+  function updateDemo(dt) {
+    if (!demo) return;
+    demo.t += dt;
+    if (demo.kind === 'strike' && !demo.fired && demo.t > 0.6) { demo.fired = true; startStrike(false); }
+    if (demo.kind === 'spin') {
+      if (!demo.fired && demo.t > 0.5) { demo.fired = true; S.mode = 'spin'; S.spinTime = 0; S.spinPhase = S.angle - Math.PI / 2; }
+      if (demo.fired && S.mode === 'spin' && S.spinTime > 1.3) releaseSpin();
+    }
+    if (demo.t > 4) demo = null;
+  }
+  document.getElementById('demoStrike').onclick = () => runDemo('strike');
+  document.getElementById('demoSpin').onclick = () => runDemo('spin');
+
+  // ---------- цикл ----------
+  setActive(false);
+  let last = performance.now(), acc = 0;
+  function frame(now) {
+    const real = Math.min(0.05, (now - last) / 1000); last = now;
+    acc += real;
+    while (acc >= DT) {
+      updateDemo(DT);
+      if (S.active) step(DT);
+      if (S.wrap) S.wrap.phase += DT * 2;
+      acc -= DT;
+    }
+    updateFx(real);
+    if (mode === 'game') updateTarget(real); else updateApp(real);
+    if (S.active) render(); else status.textContent = 'курсор';
+    requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>
