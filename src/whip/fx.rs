@@ -21,6 +21,8 @@ const WELT_HI: u32 = 0xffd0d8;
 struct Crack {
     pos: Vec2,
     big: bool,
+    /// Масштаб плети на момент щелчка.
+    s: f32,
     t: f32,
     rot: f32,
 }
@@ -29,6 +31,7 @@ struct Welt {
     pos: Vec2,
     dir: Vec2,
     big: bool,
+    s: f32,
     t: f32,
 }
 
@@ -37,11 +40,13 @@ pub struct Fx {
     cracks: Vec<Crack>,
     welts: Vec<Welt>,
     rng: u32,
+    /// Масштаб новых эффектов (= размер плети).
+    scale: f32,
 }
 
 impl Default for Fx {
     fn default() -> Self {
-        Self { cracks: Vec::new(), welts: Vec::new(), rng: 0x9e37_79b9 }
+        Self { cracks: Vec::new(), welts: Vec::new(), rng: 0x9e37_79b9, scale: 1.0 }
     }
 }
 
@@ -49,7 +54,12 @@ impl Fx {
     /// Вспышка, 8 лучей, расходящееся кольцо. `big` — усиленный (захлёст): крупнее в 1,6 раза. Без текста.
     pub fn crack(&mut self, pos: Vec2, big: bool) {
         let rot = self.rand() * std::f32::consts::PI;
-        self.cracks.push(Crack { pos, big, t: 0.0, rot });
+        self.cracks.push(Crack { pos, big, s: self.scale, t: 0.0, rot });
+    }
+
+    /// Масштаб для новых вспышек и следов; уже живые эффекты не меняются.
+    pub fn set_scale(&mut self, s: f32) {
+        self.scale = s;
     }
 
     /// Красный след вдоль `dir` (направление кончика хлыста) — только в режиме «Просто плеть».
@@ -57,7 +67,7 @@ impl Fx {
         if self.welts.len() >= MAX_WELTS {
             self.welts.remove(0);
         }
-        self.welts.push(Welt { pos, dir: dir.normalize_or(Vec2::X), big, t: 0.0 });
+        self.welts.push(Welt { pos, dir: dir.normalize_or(Vec2::X), big, s: self.scale, t: 0.0 });
     }
 
     pub fn update(&mut self, dt: f32) {
@@ -95,39 +105,39 @@ impl Fx {
             if op <= 0.0 {
                 continue;
             }
-            let l = if w.big { 26.0 } else { 18.0 };
+            let l = if w.big { 26.0 } else { 18.0 } * w.s;
             let d = w.dir * l;
             // Контрольная точка квадратичной кривой — сбоку от центра (лёгкий изгиб).
             let ctrl = w.pos + Vec2::new(-d.y, d.x) * 0.25;
-            quad(list, w.pos - d, ctrl, w.pos + d, if w.big { 5.0 } else { 3.5 }, rgb(WELT, 0.85 * op));
-            quad(list, w.pos - d * 0.8, ctrl, w.pos + d * 0.8, 1.0, rgb(WELT_HI, op));
+            quad(list, w.pos - d, ctrl, w.pos + d, if w.big { 5.0 } else { 3.5 } * w.s, rgb(WELT, 0.85 * op));
+            quad(list, w.pos - d * 0.8, ctrl, w.pos + d * 0.8, w.s, rgb(WELT_HI, op));
         }
     }
 
     /// Только вспышки щелчков.
     pub fn draw_cracks(&self, list: &mut DrawList) {
         for c in &self.cracks {
-            let k = if c.big { 1.6 } else { 1.0 };
+            let k = if c.big { 1.6 } else { 1.0 } * c.s;
             let u = (c.t / CRACK_LIFE).clamp(0.0, 1.0);
             // Вспышка: растёт и гаснет за первую треть.
             let fo = (1.0 - u * 3.0).max(0.0);
             if fo > 0.0 {
-                let r = 3.0 + 12.0 * k * ease_out((u * 3.0).min(1.0));
+                let r = 3.0 * c.s + 12.0 * k * ease_out((u * 3.0).min(1.0));
                 list.dot(c.pos, r, rgb(FLASH, fo));
             }
             let op = 1.0 - u;
             // Расходящееся кольцо.
-            list.ring(c.pos, 4.0 + 34.0 * k * ease_out(u), 1.5, rgb(RING, op));
+            list.ring(c.pos, 4.0 * c.s + 34.0 * k * ease_out(u), 1.5 * c.s, rgb(RING, op));
             // 8 лучей: отходят от центра и укорачиваются.
-            let r0 = 6.0 + 10.0 * k * u;
+            let r0 = 6.0 * c.s + 10.0 * k * u;
             let r1 = r0 + 10.0 * k * (1.0 - u);
-            const W: f32 = 1.6;
+            let w = 1.6 * c.s;
             if r1 - r0 > 0.05 {
                 for j in 0..8 {
                     let a = Vec2::from_angle(c.rot + j as f32 * std::f32::consts::FRAC_PI_4);
                     // Капсула выходит за концы на W/2 — сдвигаем внутрь, если есть куда.
-                    let pad = ((r1 - r0) * 0.5).min(W * 0.5);
-                    list.segment(c.pos + a * (r0 + pad), c.pos + a * (r1 - pad), W, rgb(RAYS, op));
+                    let pad = ((r1 - r0) * 0.5).min(w * 0.5);
+                    list.segment(c.pos + a * (r0 + pad), c.pos + a * (r1 - pad), w, rgb(RAYS, op));
                 }
             }
         }

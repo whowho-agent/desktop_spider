@@ -212,13 +212,33 @@ impl fmt::Display for Hotkey {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Default)]
+/// Размер плети: множитель к эталону из эскиза (рукоять ≈ 50 pt, хлыст ≈ 190 pt).
+pub const WHIP_SIZE_MIN: f32 = 0.5;
+pub const WHIP_SIZE_MAX: f32 = 3.0;
+/// Готовые размеры для меню.
+pub const WHIP_SIZES: [(f32, &str); 4] = [(0.7, "Маленькая"), (1.0, "Средняя"), (1.4, "Большая"), (2.0, "Огромная")];
+
+#[derive(Clone, Debug, PartialEq)]
 pub struct Settings {
     pub mode: Mode,
     pub whip_skin: WhipSkin,
+    /// Множитель размера плети, `WHIP_SIZE_MIN..=WHIP_SIZE_MAX`.
+    pub whip_size: f32,
     pub whip_hotkey: Hotkey,
     /// Имя пресета паука; пусто — `$SPIDER_PRESET` или "spider".
     pub preset: String,
+}
+
+impl Default for Settings {
+    fn default() -> Self {
+        Self {
+            mode: Mode::default(),
+            whip_skin: WhipSkin::default(),
+            whip_size: 1.0,
+            whip_hotkey: Hotkey::default(),
+            preset: String::new(),
+        }
+    }
 }
 
 /// Формат файла при записи.
@@ -226,6 +246,7 @@ pub struct Settings {
 struct RawOut<'a> {
     mode: &'a str,
     whip_skin: &'a str,
+    whip_size: f32,
     whip_hotkey: String,
     preset: &'a str,
 }
@@ -275,6 +296,20 @@ impl Settings {
             }
         };
         for (k, v) in &table {
+            // Единственное числовое поле; остальные — строки.
+            if k == "whip_size" {
+                match v.as_float().or_else(|| v.as_integer().map(|i| i as f64)) {
+                    Some(x) => {
+                        let x = x as f32;
+                        s.whip_size = x.clamp(WHIP_SIZE_MIN, WHIP_SIZE_MAX);
+                        if s.whip_size != x {
+                            eprintln!("settings: {origin}: whip_size = {x} вне {WHIP_SIZE_MIN}..{WHIP_SIZE_MAX}, беру {}", s.whip_size);
+                        }
+                    }
+                    None => eprintln!("settings: {origin}: whip_size должен быть числом, игнорирую"),
+                }
+                continue;
+            }
             let Some(val) = v.as_str() else {
                 eprintln!("settings: {origin}: {k} должен быть строкой, игнорирую");
                 continue;
@@ -303,6 +338,7 @@ impl Settings {
         let raw = RawOut {
             mode: self.mode.as_str(),
             whip_skin: self.whip_skin.as_str(),
+            whip_size: self.whip_size,
             whip_hotkey: self.whip_hotkey.to_string(),
             preset: &self.preset,
         };
@@ -359,6 +395,7 @@ mod tests {
         let s = Settings {
             mode: Mode::Game,
             whip_skin: WhipSkin::Black,
+            whip_size: 1.4,
             whip_hotkey: Hotkey::parse("shift+cmd+F13").unwrap(),
             preset: "tarantula".into(),
         };
@@ -459,5 +496,14 @@ mod tests {
         assert_eq!(Settings::load(), s);
         std::env::remove_var("SPIDER_CONFIG");
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn whip_size_parse_and_clamp() {
+        assert_eq!(Settings::from_toml("whip_size = 1.4\n", "t").whip_size, 1.4);
+        assert_eq!(Settings::from_toml("whip_size = 2\n", "t").whip_size, 2.0);
+        assert_eq!(Settings::from_toml("whip_size = 9.0\n", "t").whip_size, WHIP_SIZE_MAX);
+        assert_eq!(Settings::from_toml("whip_size = 0.1\n", "t").whip_size, WHIP_SIZE_MIN);
+        assert_eq!(Settings::from_toml("whip_size = \"big\"\n", "t").whip_size, 1.0);
     }
 }

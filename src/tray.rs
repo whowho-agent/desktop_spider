@@ -11,7 +11,7 @@ use tray_icon::menu::accelerator::{Code, Modifiers};
 use tray_icon::menu::{CheckMenuItem, Menu, MenuEvent, MenuItem, PredefinedMenuItem, Submenu};
 use tray_icon::{Icon, TrayIcon, TrayIconBuilder};
 
-use crate::settings::{Hotkey, Mode, Settings, WhipSkin};
+use crate::settings::{Hotkey, Mode, Settings, WhipSkin, WHIP_SIZES};
 use std::cell::Cell;
 
 /// Готовые сочетания хоткея в меню: ⌃⌥, ⌃⇧, ⌥⇧, ⌃⌥⇧.
@@ -34,6 +34,8 @@ pub enum TrayAction {
     Mode(crate::settings::Mode),
     /// Цвет плети.
     Skin(crate::settings::WhipSkin),
+    /// Размер плети (множитель).
+    Size(f32),
     /// Хоткей плети (из списка готовых сочетаний).
     Hotkey(crate::settings::Hotkey),
 }
@@ -50,6 +52,8 @@ pub struct Tray {
     modes: Vec<(Mode, CheckMenuItem)>,
     /// Радиогруппа цветов плети.
     skins: Vec<(WhipSkin, CheckMenuItem)>,
+    /// Радиогруппа размеров; если размер из config.toml не из списка — ни один не отмечен.
+    sizes: Vec<(f32, CheckMenuItem)>,
     hotkey_menu: Submenu,
     hotkeys: Vec<(Hotkey, CheckMenuItem)>,
     /// «Своё: …» — неактивный пункт с галочкой, если хоткей из config.toml не из списка.
@@ -86,6 +90,20 @@ impl Tray {
             .into_iter()
             .map(|(k, t)| (k, CheckMenuItem::new(t, true, k == WhipSkin::default(), None)))
             .collect();
+        let size_menu = Submenu::new("Размер", true);
+        let sizes: Vec<(f32, CheckMenuItem)> = WHIP_SIZES
+            .iter()
+            .map(|&(v, t)| (v, CheckMenuItem::new(t, true, v == 1.0, None)))
+            .collect();
+        for (_, item) in &sizes {
+            size_menu.append(item).map_err(|e| e.to_string())?;
+        }
+        size_menu
+            .append_items(&[
+                &PredefinedMenuItem::separator(),
+                &MenuItem::new("Любой: whip_size в config.toml (0.5–3)", false, None),
+            ])
+            .map_err(|e| e.to_string())?;
         let hotkey_menu = Submenu::new("Хоткей (удерживать)", true);
         let hotkeys: Vec<(Hotkey, CheckMenuItem)> = HOTKEY_PRESETS
             .iter()
@@ -106,7 +124,7 @@ impl Tray {
             whip_menu.append(item).map_err(|e| e.to_string())?;
         }
         whip_menu
-            .append_items(&[&PredefinedMenuItem::separator(), &hotkey_menu])
+            .append_items(&[&PredefinedMenuItem::separator(), &size_menu, &hotkey_menu])
             .map_err(|e| e.to_string())?;
 
         let menu = Menu::new();
@@ -144,6 +162,7 @@ impl Tray {
             quit,
             modes,
             skins,
+            sizes,
             hotkey_menu,
             hotkeys,
             custom_hotkey,
@@ -203,6 +222,9 @@ impl Tray {
         }
         if let Some(k) = pick(&self.skins, id) {
             return Some(TrayAction::Skin(k));
+        }
+        if let Some(v) = pick(&self.sizes, id) {
+            return Some(TrayAction::Size(v));
         }
         if let Some(h) = pick(&self.hotkeys, id) {
             self.show_custom_hotkey(None);
@@ -305,6 +327,9 @@ impl Tray {
         }
         for (k, item) in &self.skins {
             item.set_checked(*k == s.whip_skin);
+        }
+        for (v, item) in &self.sizes {
+            item.set_checked((*v - s.whip_size).abs() < 1e-3);
         }
         let mut known = false;
         for (h, item) in &self.hotkeys {

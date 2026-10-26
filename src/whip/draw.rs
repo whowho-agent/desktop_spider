@@ -25,20 +25,20 @@ const ACCENT: [f32; 3] = [1.0, 0.827, 0.42];
 pub fn draw_whip(list: &mut DrawList, pose: &WhipPose, pal: &Palette) {
     // Порядок как в эскизе: кольцо заряда, хлыст, рукоять поверх.
     if pose.charge > 0.0 {
-        draw_charge(list, pose.hand, pose.charge.min(1.0));
+        draw_charge(list, pose.hand, pose.charge.min(1.0), pose.scale);
     }
-    draw_lash(list, pose.rope, pal, 1.0);
-    draw_handle(list, pose.hand, pose.angle, pal, 1.0);
+    draw_lash(list, pose.rope, pal, pose.scale);
+    draw_handle(list, pose.hand, pose.angle, pal, pose.scale);
 }
 
 /// Пунктирное кольцо заряда (в эскизе dasharray «3 5», толщина 1,2).
-pub fn draw_charge(list: &mut DrawList, center: Vec2, charge: f32) {
-    let r = 38.0 + 6.0 * charge;
+pub fn draw_charge(list: &mut DrawList, center: Vec2, charge: f32, scale: f32) {
+    let r = (38.0 + 6.0 * charge) * scale;
     let col = [ACCENT[0], ACCENT[1], ACCENT[2], 0.9 * charge];
-    let w: f32 = 1.2;
+    let w: f32 = 1.2 * scale;
     let n = ((std::f32::consts::TAU * r) / 8.0).round().max(8.0) as usize;
     // Штрих 3 pt по дуге; капсула добавляет w с концов, поэтому ось короче.
-    let half = ((3.0 - w) * 0.5).max(0.3) / r;
+    let half = ((3.0 * scale - w) * 0.5).max(0.3 * scale) / r;
     for i in 0..n {
         let a = i as f32 / n as f32 * std::f32::consts::TAU;
         let p0 = center + Vec2::from_angle(a - half) * r;
@@ -47,7 +47,7 @@ pub fn draw_charge(list: &mut DrawList, center: Vec2, charge: f32) {
     }
 }
 
-/// Рукоять. `scale` — только для схемы в тестах (в приложении 1).
+/// Рукоять. `scale` — размер плети (и увеличение на тестовой схеме).
 pub fn draw_handle(list: &mut DrawList, hand: Vec2, angle: f32, pal: &Palette, scale: f32) {
     let rot = Vec2::from_angle(angle);
     let to_world = |x: f32, y: f32| hand + rot.rotate(Vec2::new((x - GRIP_X) * scale, y * scale));
@@ -276,7 +276,7 @@ mod tests {
             for (angle, bend, charge) in [(0.0, 0.0, 0.0), (-0.9, 2.0, 0.5), (2.5, -3.0, 1.0)] {
                 let hand = Vec2::new(300.0, 200.0);
                 let rope = arc_rope(tip_of(hand, angle), angle, bend);
-                let pose = WhipPose { hand, angle, rope: &rope, charge };
+                let pose = WhipPose { hand, angle, rope: &rope, charge, scale: 1.0 };
                 let mut list = DrawList::default();
                 draw_whip(&mut list, &pose, pal);
                 assert!(list.shapes.len() > 60);
@@ -284,7 +284,7 @@ mod tests {
             }
             // Вырожденный хлыст: все точки совпали — без NaN.
             let rope = vec![Vec2::new(10.0, 10.0); N];
-            let pose = WhipPose { hand: Vec2::ZERO, angle: 0.0, rope: &rope, charge: 0.0 };
+            let pose = WhipPose { hand: Vec2::ZERO, angle: 0.0, rope: &rope, charge: 0.0, scale: 1.0 };
             let mut list = DrawList::default();
             draw_whip(&mut list, &pose, pal);
             assert!(all_finite(&list));
@@ -327,7 +327,7 @@ mod tests {
             for &(hand, angle, bend, charge) in &poses {
                 let hand = hand + Vec2::new(0.0, k as f32 * 150.0);
                 let rope = arc_rope(tip_of(hand, angle), angle, bend);
-                let pose = WhipPose { hand, angle, rope: &rope, charge };
+                let pose = WhipPose { hand, angle, rope: &rope, charge, scale: 1.0 };
                 draw_whip(&mut list, &pose, pal);
             }
         }
@@ -335,7 +335,7 @@ mod tests {
         for (k, pal) in [&LIGHT, &BLACK].into_iter().enumerate() {
             let hand = Vec2::new(760.0, 420.0 + k as f32 * 150.0);
             let rope = arc_rope(tip_of(hand, 0.3), 0.3, 1.5);
-            draw_whip(&mut list, &WhipPose { hand, angle: 0.3, rope: &rope, charge: 0.6 }, pal);
+            draw_whip(&mut list, &WhipPose { hand, angle: 0.3, rope: &rope, charge: 0.6, scale: 1.0 }, pal);
         }
 
         // 3. Щелчок в разные моменты и усиленный, след.

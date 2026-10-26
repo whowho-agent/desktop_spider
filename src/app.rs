@@ -93,6 +93,8 @@ impl ApplicationHandler<UserEvent> for App {
             p
         });
         let cursor = platform::cursor_position(&window);
+        let mut whip = Whip::new(cursor);
+        whip.set_scale(settings.whip_size, cursor);
         let mut creature = Creature::new(&preset, cursor);
         creature.set_game(settings.mode == Mode::Game);
         let debug = std::env::var_os("SPIDER_DEBUG").is_some();
@@ -124,7 +126,7 @@ impl ApplicationHandler<UserEvent> for App {
             last_move: now,
             next_idle_tick: now,
             settings,
-            whip: Whip::new(cursor),
+            whip,
             whip_events: Vec::new(),
             input: WhipInput::default(),
             hits: 0,
@@ -193,6 +195,11 @@ impl ApplicationHandler<UserEvent> for App {
             TrayAction::Mode(m) => s.set_mode(m),
             TrayAction::Skin(skin) => {
                 s.settings.whip_skin = skin;
+                s.save_settings();
+            }
+            TrayAction::Size(v) => {
+                s.settings.whip_size = v;
+                s.whip.set_scale(v, s.cursor);
                 s.save_settings();
             }
             TrayAction::Hotkey(hk) => {

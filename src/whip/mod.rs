@@ -31,6 +31,8 @@ pub struct WhipPose<'a> {
     pub rope: &'a [Vec2],
     /// Заряд раскрутки 0..1 (0 — кольцо не рисуется).
     pub charge: f32,
+    /// Размер плети: множитель толщин, рукояти и кольца заряда (точки `hand`/`rope` уже в мире).
+    pub scale: f32,
 }
 
 /// Что произошло за `update`.
@@ -80,6 +82,10 @@ pub struct Whip {
     hold: Vec2,
     /// Сколько рукоять уже в покое, с.
     quiet: f32,
+    /// Размер плети. Физика считается в эталонных единицах эскиза (scale = 1):
+    /// курсор и цель делятся на scale на входе, точки событий и позы умножаются на выходе.
+    /// Так при любом размере удар занимает то же время, просто плеть крупнее и бьёт дальше.
+    scale: f32,
 }
 
 impl Whip {
@@ -98,11 +104,24 @@ impl Whip {
             lasso: false,
             hold: cursor,
             quiet: QUIET,
+            scale: 1.0,
         }
     }
 
     /// Сбросить хлыст висящим под курсором (при включении плети).
+    /// Сменить размер (множитель к эталону). Хлыст пересобирается висящим под курсором.
+    pub fn set_scale(&mut self, scale: f32, cursor: Vec2) {
+        let scale = scale.clamp(0.25, 4.0);
+        if (scale - self.scale).abs() < 1e-4 {
+            return;
+        }
+        self.scale = scale;
+        self.fx.set_scale(scale);
+        self.reset(cursor);
+    }
+
     pub fn reset(&mut self, cursor: Vec2) {
+        let cursor = cursor / self.scale;
         self.hand.set_ready();
         self.hand.off = Vec2::ZERO;
         self.hand.angle = self.hand.aim;
@@ -118,6 +137,9 @@ impl Whip {
     /// События дописываются в `events`.
     pub fn update(&mut self, dt: f32, cursor: Vec2, input: WhipInput, target: Option<Vec2>, events: &mut Vec<WhipEvent>) {
         self.fx.update(dt);
+        // В эталонные единицы.
+        let cursor = cursor / self.scale;
+        let target = target.map(|t| t / self.scale);
 
         // Скорость курсора, сглаженная как в эскизе (по сдвигам, а не по кадрам).
         self.since_move += dt;
@@ -158,7 +180,7 @@ impl Whip {
             self.substep(sub, c, target, events);
         }
         if self.hand.mode == Mode::Wrap {
-            events.push(WhipEvent::Hold { pos: self.hold });
+            events.push(WhipEvent::Hold { pos: self.hold * self.scale });
         }
         self.quiet = if self.hand.settled() { self.quiet + dt } else { 0.0 };
     }
@@ -214,7 +236,7 @@ impl Whip {
                     let d = e - t;
                     self.hand.start_wrap(d.y.atan2(d.x), t);
                     self.hold = t;
-                    self.fx.crack(e, false);
+                    self.fx.crack(e * self.scale, false);
                     events.push(WhipEvent::Caught);
                 }
                 _ => {
@@ -222,8 +244,8 @@ impl Whip {
                     let late = if lasso { LASSO_LATE } else if power { 0.3 } else { 0.34 };
                     if (!lasso && fast && ahead > CRACK_AHEAD) || self.hand.t > late {
                         self.cracked = true;
-                        self.fx.crack(e, power);
-                        events.push(WhipEvent::Crack { pos: e, dir: self.rope.tip_dir(), big: power });
+                        self.fx.crack(e * self.scale, power);
+                        events.push(WhipEvent::Crack { pos: e * self.scale, dir: self.rope.tip_dir(), big: power });
                     }
                 }
             }
@@ -249,11 +271,15 @@ impl Whip {
         // Порядок слоёв: следы под плетью, вспышки щелчков поверх.
         self.fx.draw_welts(list);
         if visible {
+            // Из эталонных единиц в мировые.
+            let k = self.scale;
+            let rope: [Vec2; rope::N] = std::array::from_fn(|i| self.rope.p[i] * k);
             let pose = WhipPose {
-                hand: self.hand.pos(self.cursor),
+                hand: self.hand.pos(self.cursor) * k,
                 angle: self.hand.angle,
-                rope: &self.rope.p,
+                rope: &rope,
                 charge: self.hand.charge(),
+                scale: k,
             };
             draw::draw_whip(list, &pose, skin::palette(skin));
         }
@@ -433,5 +459,30 @@ mod tests {
             w.update(DT, Vec2::new(i as f32 * 8.0, 0.0), inp(false, false), None, &mut ev);
         }
         assert!(w.hand.aim.abs() < 0.2, "aim {}", w.hand.aim);
+    }
+
+    /// Размер — чистый масштаб: при ×2 щелчок на том же шаге и ровно вдвое дальше.
+    #[test]
+    fn size_scales_reach_not_timing() {
+        let crack_at = |scale: f32| {
+            let mut w = Whip::new(C);
+            w.set_scale(scale, C);
+            w.hand.aim = -0.35;
+            w.hand.angle = -0.35;
+            w.reset(C);
+            let mut ev = Vec::new();
+            for _ in 0..240 {
+                w.update(DT, C, inp(false, false), None, &mut ev);
+            }
+            let c = cracks(&run(&mut w, 120, None, |i| inp(i < 5, false)));
+            assert_eq!(c.len(), 1, "scale {scale}");
+            (c[0].0, c[0].1)
+        };
+        let (i1, p1) = crack_at(1.0);
+        for k in [0.7f32, 2.0] {
+            let (ik, pk) = crack_at(k);
+            assert_eq!(ik, i1, "scale {k}: другой шаг щелчка");
+            assert!(pk.distance(p1 * k) < 0.5, "scale {k}: {pk} vs {}", p1 * k);
+        }
     }
 }
